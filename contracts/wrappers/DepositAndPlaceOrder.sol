@@ -12,14 +12,13 @@ contract DepositAndPlaceOrder {
     {
         nativeTokenWrapper = IWETH(_nativeTokenWrapper);
         mutoPool = MutoPool(mutoPoolAddress);
-        IERC20(_nativeTokenWrapper).approve(mutoPoolAddress, uint256(-1));
+        IERC20(_nativeTokenWrapper).approve(mutoPoolAddress, uint256(int(-1)));
     }
 
     function depositAndPlaceOrder(
         uint256 auctionId,
         uint96[] memory _minBuyAmounts,
-        bytes32[] memory _prevSellOrders,
-        bytes calldata allowListCallData
+        bytes32[] memory _prevSellOrders
     ) external payable returns (uint64 userId) {
         uint96[] memory sellAmounts = new uint96[](1);
         require(msg.value < 2**96, "too much value sent");
@@ -31,7 +30,6 @@ contract DepositAndPlaceOrder {
                 _minBuyAmounts,
                 sellAmounts,
                 _prevSellOrders,
-                allowListCallData,
                 msg.sender
             );
     }

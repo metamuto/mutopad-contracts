@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
+pragma solidity >=0.6.8;
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "./libraries/IterableOrderedOrderSet.sol";
@@ -8,7 +8,6 @@ import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "./libraries/IdToAddressBiMap.sol";
 import "./libraries/SafeCast.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "./interfaces/AllowListVerifier.sol";
 
 contract MutoPool is Ownable {
     using SafeERC20 for IERC20;
@@ -20,25 +19,65 @@ contract MutoPool is Ownable {
     using IterableOrderedOrderSet for bytes32;
     using IdToAddressBiMap for IdToAddressBiMap.Data;
 
+    struct InitialAuctionData{
+        bytes32 formHash;
+        IERC20 auctioningToken;
+        IERC20 biddingToken;
+        uint256 orderCancellationEndDate;
+        uint256 auctionEndDate;
+        uint256 minimumBiddingAmountPerOrder;
+        bool isAtomicClosureAllowed;
+        uint256 minFundingThreshold;
+        uint96 auctionedSellAmount;
+        uint96 minBuyAmount;
+    }
+    
+    struct AuctionData {
+        InitialAuctionData initData;
+        bytes32 initialAuctionOrder;
+        uint256 interimSumBidAmount;
+        bytes32 interimOrder;
+        bytes32 clearingPriceOrder;
+        uint96 volumeClearingPriceOrder;
+        bool minFundingThresholdNotReached;
+        uint256 feeNumerator;    
+    }
+    
+    mapping(uint256 => IterableOrderedOrderSet.Data) internal sellOrders;
+    mapping(uint256 => AuctionData) public auctionData;
+
+    IdToAddressBiMap.Data private registeredUsers;
+    uint64 public numUsers;
+    uint256 public auctionCounter;
+
+    constructor() public Ownable() {}
+
+    uint256 public feeNumerator = 0;
+    uint256 public constant FEE_DENOMINATOR = 1000;
+    uint64 public feeReceiverUserId = 1;
+    
+    // @dev: Identifier to check weather the auction is still live
     modifier atStageOrderPlacement(uint256 auctionId) {
         require(
-            block.timestamp < auctionData[auctionId].auctionEndDate,
+            block.timestamp < auctionData[auctionId].initData.auctionEndDate,
             "no longer in order placement phase"
         );
         _;
     }
-
+    
+    // @dev: Identifier to check cancelation end date at order cancelation 
     modifier atStageOrderPlacementAndCancelation(uint256 auctionId) {
         require(
-            block.timestamp < auctionData[auctionId].orderCancellationEndDate,
+            block.timestamp < auctionData[auctionId].initData.orderCancellationEndDate,
             "no longer in order placement and cancelation phase"
         );
         _;
     }
-
+    
+    // @dev: Identifier to check if auction end date has been reached
     modifier atStageSolutionSubmission(uint256 auctionId) {
         {
-            uint256 auctionEndDate = auctionData[auctionId].auctionEndDate;
+            uint256 auctionEndDate = auctionData[auctionId].initData.auctionEndDate;
             require(
                 auctionEndDate != 0 &&
                     block.timestamp >= auctionEndDate &&
@@ -48,7 +87,8 @@ contract MutoPool is Ownable {
         }
         _;
     }
-
+    
+    
     modifier atStageFinished(uint256 auctionId) {
         require(
             auctionData[auctionId].clearingPriceOrder != bytes32(0),
@@ -56,7 +96,9 @@ contract MutoPool is Ownable {
         );
         _;
     }
-
+    
+    
+    
     event NewSellOrder(
         uint256 indexed auctionId,
         uint64 indexed userId,
@@ -86,9 +128,7 @@ contract MutoPool is Ownable {
         uint96 _auctionedSellAmount,
         uint96 _minBuyAmount,
         uint256 minimumBiddingAmountPerOrder,
-        uint256 minFundingThreshold,
-        address allowListContract,
-        bytes allowListData
+        uint256 minFundingThreshold
     );
     event AuctionCleared(
         uint256 indexed auctionId,
@@ -97,73 +137,11 @@ contract MutoPool is Ownable {
         bytes32 clearingPriceOrder
     );
     event UserRegistration(address indexed user, uint64 userId);
-
-    struct AuctionData {
-        IERC20 auctioningToken;
-        IERC20 biddingToken;
-        uint256 orderCancellationEndDate;
-        uint256 auctionEndDate;
-        bytes32 initialAuctionOrder;
-        uint256 minimumBiddingAmountPerOrder;
-        uint256 interimSumBidAmount;
-        bytes32 interimOrder;
-        bytes32 clearingPriceOrder;
-        uint96 volumeClearingPriceOrder;
-        bool minFundingThresholdNotReached;
-        bool isAtomicClosureAllowed;
-        uint256 feeNumerator;
-        uint256 minFundingThreshold;
-    }
-    mapping(uint256 => IterableOrderedOrderSet.Data) internal sellOrders;
-    mapping(uint256 => AuctionData) public auctionData;
-    mapping(uint256 => address) public auctionAccessManager;
-    mapping(uint256 => bytes) public auctionAccessData;
-
-    IdToAddressBiMap.Data private registeredUsers;
-    uint64 public numUsers;
-    uint256 public auctionCounter;
-
-    constructor() public Ownable() {}
-
-    uint256 public feeNumerator = 0;
-    uint256 public constant FEE_DENOMINATOR = 1000;
-    uint64 public feeReceiverUserId = 1;
-
-    function setFeeParameters(
-        uint256 newFeeNumerator,
-        address newfeeReceiverAddress
-    ) public onlyOwner() {
-        require(
-            newFeeNumerator <= 15,
-            "Fee is not allowed to be set higher than 1.5%"
-        );
-        // caution: for currently running auctions, the feeReceiverUserId is changing as well.
-        feeReceiverUserId = getUserId(newfeeReceiverAddress);
-        feeNumerator = newFeeNumerator;
-    }
-
-    // @dev: function to intiate a new auction
-    // Warning: In case the auction is expected to raise more than
-    // 2^96 units of the biddingToken, don't start the auction, as
-    // it will not be settlable. This corresponds to about 79
-    // billion DAI.
-    //
-    // Prices between biddingToken and auctioningToken are expressed by a
-    // fraction whose components are stored as uint96.
+    
+    
     function initiateAuction(
-        IERC20 _auctioningToken,
-        IERC20 _biddingToken,
-        uint256 orderCancellationEndDate,
-        uint256 auctionEndDate,
-        uint96 _auctionedSellAmount,
-        uint96 _minBuyAmount,
-        uint256 minimumBiddingAmountPerOrder,
-        uint256 minFundingThreshold,
-        bool isAtomicClosureAllowed,
-        address accessManagerContract,
-        bytes memory accessManagerContractData
+	InitialAuctionData calldata _initData
     ) public returns (uint256) {
-        // withdraws sellAmount + fees
         _auctioningToken.safeTransferFrom(
             msg.sender,
             address(this),
@@ -171,68 +149,58 @@ contract MutoPool is Ownable {
                 FEE_DENOMINATOR
             ) //[0]
         );
-        require(_auctionedSellAmount > 0, "cannot auction zero tokens");
-        require(_minBuyAmount > 0, "tokens cannot be auctioned for free");
+        require(_initData.auctionedSellAmount > 0, "cannot auction zero tokens");
+        require(_initData.minBuyAmount > 0, "tokens cannot be auctioned for free");
         require(
-            minimumBiddingAmountPerOrder > 0,
+            _initData.minimumBiddingAmountPerOrder > 0,
             "minimumBiddingAmountPerOrder is not allowed to be zero"
         );
         require(
-            orderCancellationEndDate <= auctionEndDate,
+            _initData.orderCancellationEndDate <= _initData.auctionEndDate,
             "time periods are not configured correctly"
         );
         require(
-            auctionEndDate > block.timestamp,
+            _initData.auctionEndDate > block.timestamp,
             "auction end date must be in the future"
         );
         auctionCounter = auctionCounter.add(1);
         sellOrders[auctionCounter].initializeEmptyList();
         uint64 userId = getUserId(msg.sender);
         auctionData[auctionCounter] = AuctionData(
-            _auctioningToken,
-            _biddingToken,
-            orderCancellationEndDate,
-            auctionEndDate,
+            _initData,
             IterableOrderedOrderSet.encodeOrder(
                 userId,
-                _minBuyAmount,
-                _auctionedSellAmount
+                _initData.minBuyAmount,
+                _initData.auctionedSellAmount
             ),
-            minimumBiddingAmountPerOrder,
             0,
             IterableOrderedOrderSet.QUEUE_START,
             bytes32(0),
             0,
             false,
-            isAtomicClosureAllowed,
-            feeNumerator,
-            minFundingThreshold
+            feeNumerator
         );
-        auctionAccessManager[auctionCounter] = accessManagerContract;
-        auctionAccessData[auctionCounter] = accessManagerContractData;
         emit NewAuction(
             auctionCounter,
-            _auctioningToken,
-            _biddingToken,
-            orderCancellationEndDate,
-            auctionEndDate,
+            _initData.auctioningToken,
+            _initData.biddingToken,
+            _initData.orderCancellationEndDate,
+            _initData.auctionEndDate,
             userId,
-            _auctionedSellAmount,
-            _minBuyAmount,
-            minimumBiddingAmountPerOrder,
-            minFundingThreshold,
-            accessManagerContract,
-            accessManagerContractData
+            _initData.auctionedSellAmount,
+            _initData.minBuyAmount,
+            _initData.minimumBiddingAmountPerOrder,
+            _initData.minFundingThreshold
         );
         return auctionCounter;
     }
-
-    function placeSellOrders(
+    
+    
+function placeSellOrders(
         uint256 auctionId,
         uint96[] memory _minBuyAmounts,
         uint96[] memory _sellAmounts,
-        bytes32[] memory _prevSellOrders,
-        bytes calldata allowListCallData
+        bytes32[] memory _prevSellOrders
     ) external atStageOrderPlacement(auctionId) returns (uint64 userId) {
         return
             _placeSellOrders(
@@ -240,17 +208,17 @@ contract MutoPool is Ownable {
                 _minBuyAmounts,
                 _sellAmounts,
                 _prevSellOrders,
-                allowListCallData,
                 msg.sender
             );
     }
-
-    function placeSellOrdersOnBehalf(
+    
+    
+    
+function placeSellOrdersOnBehalf(
         uint256 auctionId,
         uint96[] memory _minBuyAmounts,
         uint96[] memory _sellAmounts,
         bytes32[] memory _prevSellOrders,
-        bytes calldata allowListCallData,
         address orderSubmitter
     ) external atStageOrderPlacement(auctionId) returns (uint64 userId) {
         return
@@ -259,32 +227,21 @@ contract MutoPool is Ownable {
                 _minBuyAmounts,
                 _sellAmounts,
                 _prevSellOrders,
-                allowListCallData,
                 orderSubmitter
             );
     }
-
-    function _placeSellOrders(
+    
+    
+    
+    
+    
+function _placeSellOrders(
         uint256 auctionId,
         uint96[] memory _minBuyAmounts,
         uint96[] memory _sellAmounts,
         bytes32[] memory _prevSellOrders,
-        bytes calldata allowListCallData,
         address orderSubmitter
     ) internal returns (uint64 userId) {
-        {
-            address allowListManager = auctionAccessManager[auctionId];
-            if (allowListManager != address(0)) {
-                require(
-                    AllowListVerifier(allowListManager).isAllowed(
-                        orderSubmitter,
-                        auctionId,
-                        allowListCallData
-                    ) == AllowListVerifierHelper.MAGICVALUE,
-                    "user not allowed to place order"
-                );
-            }
-        }
         {
             (
                 ,
@@ -302,7 +259,7 @@ contract MutoPool is Ownable {
         uint256 sumOfSellAmounts = 0;
         userId = getUserId(orderSubmitter);
         uint256 minimumBiddingAmountPerOrder =
-            auctionData[auctionId].minimumBiddingAmountPerOrder;
+            auctionData[auctionId].initData.minimumBiddingAmountPerOrder;
         for (uint256 i = 0; i < _minBuyAmounts.length; i++) {
             require(
                 _minBuyAmounts[i] > 0,
@@ -333,14 +290,16 @@ contract MutoPool is Ownable {
                 );
             }
         }
-        auctionData[auctionId].biddingToken.safeTransferFrom(
+        auctionData[auctionId].initData.biddingToken.safeTransferFrom(
             msg.sender,
             address(this),
             sumOfSellAmounts
         ); //[1]
     }
-
-    function cancelSellOrders(uint256 auctionId, bytes32[] memory _sellOrders)
+    
+    
+    
+function cancelSellOrders(uint256 auctionId, bytes32[] memory _sellOrders)
         public
         atStageOrderPlacementAndCancelation(auctionId)
     {
@@ -370,56 +329,94 @@ contract MutoPool is Ownable {
                 );
             }
         }
-        auctionData[auctionId].biddingToken.safeTransfer(
+        auctionData[auctionId].initData.biddingToken.safeTransfer(
             msg.sender,
             claimableAmount
         ); //[2]
     }
-
-    function precalculateSellAmountSum(
+    
+function sendOutTokens(
         uint256 auctionId,
-        uint256 iterationSteps
-    ) public atStageSolutionSubmission(auctionId) {
-        (, , uint96 auctioneerSellAmount) =
-            auctionData[auctionId].initialAuctionOrder.decodeOrder();
-        uint256 sumBidAmount = auctionData[auctionId].interimSumBidAmount;
-        bytes32 iterOrder = auctionData[auctionId].interimOrder;
-
-        for (uint256 i = 0; i < iterationSteps; i++) {
-            iterOrder = sellOrders[auctionId].next(iterOrder);
-            (, , uint96 sellAmountOfIter) = iterOrder.decodeOrder();
-            sumBidAmount = sumBidAmount.add(sellAmountOfIter);
+        uint256 auctioningTokenAmount,
+        uint256 biddingTokenAmount,
+        uint64 userId
+    ) internal {
+        address userAddress = registeredUsers.getAddressAt(userId);
+        if (auctioningTokenAmount > 0) {
+            auctionData[auctionId].initData.auctioningToken.safeTransfer(
+                userAddress,
+                auctioningTokenAmount
+            );
         }
-
-        require(
-            iterOrder != IterableOrderedOrderSet.QUEUE_END,
-            "reached end of order list"
-        );
-
-        // it is checked that not too many iteration steps were taken:
-        // require that the sum of SellAmounts times the price of the last order
-        // is not more than initially sold amount
-        (, uint96 buyAmountOfIter, uint96 sellAmountOfIter) =
-            iterOrder.decodeOrder();
-        require(
-            sumBidAmount.mul(buyAmountOfIter) <
-                auctioneerSellAmount.mul(sellAmountOfIter),
-            "too many orders summed up"
-        );
-
-        auctionData[auctionId].interimSumBidAmount = sumBidAmount;
-        auctionData[auctionId].interimOrder = iterOrder;
+        if (biddingTokenAmount > 0) {
+            auctionData[auctionId].initData.biddingToken.safeTransfer(
+                userAddress,
+                biddingTokenAmount
+            );
+        }
     }
-
-    function settleAuctionAtomically(
+    
+    
+function processFeesAndAuctioneerFunds(
+        uint256 auctionId,
+        uint256 fillVolumeOfAuctioneerOrder,
+        uint64 auctioneerId,
+        uint96 fullAuctionedAmount
+    ) internal {
+        uint256 feeAmount =
+            fullAuctionedAmount.mul(auctionData[auctionId].feeNumerator).div(
+                FEE_DENOMINATOR
+            ); //[20]
+        if (auctionData[auctionId].minFundingThresholdNotReached) {
+            sendOutTokens(
+                auctionId,
+                fullAuctionedAmount.add(feeAmount),
+                0,
+                auctioneerId
+            ); //[4]
+        } else {
+            //[11]
+            (, uint96 priceNumerator, uint96 priceDenominator) =
+                auctionData[auctionId].clearingPriceOrder.decodeOrder();
+            uint256 unsettledAuctionTokens =
+                fullAuctionedAmount.sub(fillVolumeOfAuctioneerOrder);
+            uint256 auctioningTokenAmount =
+                unsettledAuctionTokens.add(
+                    feeAmount.mul(unsettledAuctionTokens).div(
+                        fullAuctionedAmount
+                    )
+                );
+            uint256 biddingTokenAmount =
+                fillVolumeOfAuctioneerOrder.mul(priceDenominator).div(
+                    priceNumerator
+                );
+            sendOutTokens(
+                auctionId,
+                auctioningTokenAmount,
+                biddingTokenAmount,
+                auctioneerId
+            ); //[5]
+            sendOutTokens(
+                auctionId,
+                feeAmount.mul(fillVolumeOfAuctioneerOrder).div(
+                    fullAuctionedAmount
+                ),
+                0,
+                feeReceiverUserId
+            ); //[7]
+        }
+    }
+    
+    
+    
+function settleAuctionAtomically(
         uint256 auctionId,
         uint96[] memory _minBuyAmount,
         uint96[] memory _sellAmount,
-        bytes32[] memory _prevSellOrder,
-        bytes calldata allowListCallData
+        bytes32[] memory _prevSellOrder
     ) public atStageSolutionSubmission(auctionId) {
         require(
-            auctionData[auctionId].isAtomicClosureAllowed,
+            auctionData[auctionId].initData.isAtomicClosureAllowed,
             "not allowed to settle auction atomically"
         );
         require(
@@ -442,14 +439,14 @@ contract MutoPool is Ownable {
             _minBuyAmount,
             _sellAmount,
             _prevSellOrder,
-            allowListCallData,
             msg.sender
         );
         settleAuction(auctionId);
     }
-
-    // @dev function settling the auction and calculating the price
-    function settleAuction(uint256 auctionId)
+    
+   
+   
+function settleAuction(uint256 auctionId)
         public
         atStageSolutionSubmission(auctionId)
         returns (bytes32 clearingOrder)
@@ -542,7 +539,7 @@ contract MutoPool is Ownable {
         }
         auctionData[auctionId].clearingPriceOrder = clearingOrder;
 
-        if (auctionData[auctionId].minFundingThreshold > currentBidSum) {
+        if (auctionData[auctionId].initData.minFundingThreshold > currentBidSum) {
             auctionData[auctionId].minFundingThresholdNotReached = true;
         }
         processFeesAndAuctioneerFunds(
@@ -557,16 +554,51 @@ contract MutoPool is Ownable {
             uint96(currentBidSum),
             clearingOrder
         );
-        // Gas refunds
-        auctionAccessManager[auctionId] = address(0);
-        delete auctionAccessData[auctionId];
+
         auctionData[auctionId].initialAuctionOrder = bytes32(0);
         auctionData[auctionId].interimOrder = bytes32(0);
         auctionData[auctionId].interimSumBidAmount = uint256(0);
-        auctionData[auctionId].minimumBiddingAmountPerOrder = uint256(0);
+        auctionData[auctionId].initData.minimumBiddingAmountPerOrder = uint256(0);
     }
+    
+    
+    
+function precalculateSellAmountSum(
+        uint256 auctionId,
+        uint256 iterationSteps
+    ) public atStageSolutionSubmission(auctionId) {
+        (, , uint96 auctioneerSellAmount) =
+            auctionData[auctionId].initialAuctionOrder.decodeOrder();
+        uint256 sumBidAmount = auctionData[auctionId].interimSumBidAmount;
+        bytes32 iterOrder = auctionData[auctionId].interimOrder;
 
-    function claimFromParticipantOrder(
+        for (uint256 i = 0; i < iterationSteps; i++) {
+            iterOrder = sellOrders[auctionId].next(iterOrder);
+            (, , uint96 sellAmountOfIter) = iterOrder.decodeOrder();
+            sumBidAmount = sumBidAmount.add(sellAmountOfIter);
+        }
+
+        require(
+            iterOrder != IterableOrderedOrderSet.QUEUE_END,
+            "reached end of order list"
+        );
+
+        // it is checked that not too many iteration steps were taken:
+        // require that the sum of SellAmounts times the price of the last order
+        // is not more than initially sold amount
+        (, uint96 buyAmountOfIter, uint96 sellAmountOfIter) =
+            iterOrder.decodeOrder();
+        require(
+            sumBidAmount.mul(buyAmountOfIter) <
+                auctioneerSellAmount.mul(sellAmountOfIter),
+            "too many orders summed up"
+        );
+
+        auctionData[auctionId].interimSumBidAmount = sumBidAmount;
+        auctionData[auctionId].interimOrder = iterOrder;
+    }
+    
+  function claimFromParticipantOrder(
         uint256 auctionId,
         bytes32[] memory orders
     )
@@ -637,79 +669,54 @@ contract MutoPool is Ownable {
             userId
         ); //[3]
     }
-
-    function processFeesAndAuctioneerFunds(
-        uint256 auctionId,
-        uint256 fillVolumeOfAuctioneerOrder,
-        uint64 auctioneerId,
-        uint96 fullAuctionedAmount
-    ) internal {
-        uint256 feeAmount =
-            fullAuctionedAmount.mul(auctionData[auctionId].feeNumerator).div(
-                FEE_DENOMINATOR
-            ); //[20]
-        if (auctionData[auctionId].minFundingThresholdNotReached) {
-            sendOutTokens(
-                auctionId,
-                fullAuctionedAmount.add(feeAmount),
-                0,
-                auctioneerId
-            ); //[4]
-        } else {
-            //[11]
-            (, uint96 priceNumerator, uint96 priceDenominator) =
-                auctionData[auctionId].clearingPriceOrder.decodeOrder();
-            uint256 unsettledAuctionTokens =
-                fullAuctionedAmount.sub(fillVolumeOfAuctioneerOrder);
-            uint256 auctioningTokenAmount =
-                unsettledAuctionTokens.add(
-                    feeAmount.mul(unsettledAuctionTokens).div(
-                        fullAuctionedAmount
-                    )
-                );
-            uint256 biddingTokenAmount =
-                fillVolumeOfAuctioneerOrder.mul(priceDenominator).div(
-                    priceNumerator
-                );
-            sendOutTokens(
-                auctionId,
-                auctioningTokenAmount,
-                biddingTokenAmount,
-                auctioneerId
-            ); //[5]
-            sendOutTokens(
-                auctionId,
-                feeAmount.mul(fillVolumeOfAuctioneerOrder).div(
-                    fullAuctionedAmount
-                ),
-                0,
-                feeReceiverUserId
-            ); //[7]
-        }
+    
+    
+    
+function setFeeParameters(
+        uint256 newFeeNumerator,
+        address newfeeReceiverAddress
+    ) public onlyOwner() {
+        require(
+            newFeeNumerator <= 15,
+            "Fee is not allowed to be set higher than 1.5%"
+        );
+        // caution: for currently running auctions, the feeReceiverUserId is changing as well.
+        feeReceiverUserId = getUserId(newfeeReceiverAddress);
+        feeNumerator = newFeeNumerator;
     }
+    
+    
+    
+    
 
-    function sendOutTokens(
-        uint256 auctionId,
-        uint256 auctioningTokenAmount,
-        uint256 biddingTokenAmount,
-        uint64 userId
-    ) internal {
-        address userAddress = registeredUsers.getAddressAt(userId);
-        if (auctioningTokenAmount > 0) {
-            auctionData[auctionId].auctioningToken.safeTransfer(
-                userAddress,
-                auctioningTokenAmount
-            );
-        }
-        if (biddingTokenAmount > 0) {
-            auctionData[auctionId].biddingToken.safeTransfer(
-                userAddress,
-                biddingTokenAmount
-            );
-        }
+function containsOrder(uint256 auctionId, bytes32 order)
+        public
+        view
+        returns (bool)
+    {
+        return sellOrders[auctionId].contains(order);
     }
+    
+    
+    
 
-    function registerUser(address user) public returns (uint64 userId) {
+
+function getSecondsRemainingInBatch(uint256 auctionId)
+        public
+        view
+        returns (uint256)
+    {
+        if (auctionData[auctionId].initData.auctionEndDate < block.timestamp) {
+            return 0;
+        }
+        return auctionData[auctionId].initData.auctionEndDate.sub(block.timestamp);
+    }
+    
+    
+    
+
+
+function registerUser(address user) public returns (uint64 userId) {
         numUsers = numUsers.add(1).toUint64();
         require(
             registeredUsers.insert(numUsers, user),
@@ -719,7 +726,8 @@ contract MutoPool is Ownable {
         emit UserRegistration(user, userId);
     }
 
-    function getUserId(address user) public returns (uint64 userId) {
+
+function getUserId(address user) public returns (uint64 userId) {
         if (registeredUsers.hasAddress(user)) {
             userId = registeredUsers.getId(user);
         } else {
@@ -727,23 +735,10 @@ contract MutoPool is Ownable {
             emit NewUser(userId, user);
         }
     }
+    
+function getFormHash(uint256 auction_id) public view returns(bytes32){
+    require(auction_id<=auctionCounter, "Invalid Auction Id");
+    return auctionData[auction_id].initData.formHash;
+} 
 
-    function getSecondsRemainingInBatch(uint256 auctionId)
-        public
-        view
-        returns (uint256)
-    {
-        if (auctionData[auctionId].auctionEndDate < block.timestamp) {
-            return 0;
-        }
-        return auctionData[auctionId].auctionEndDate.sub(block.timestamp);
-    }
-
-    function containsOrder(uint256 auctionId, bytes32 order)
-        public
-        view
-        returns (bool)
-    {
-        return sellOrders[auctionId].contains(order);
-    }
 }

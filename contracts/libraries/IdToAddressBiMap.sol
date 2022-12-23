@@ -48,7 +48,7 @@ library IdToAddressBiMap {
         address addr
     ) internal returns (bool) {
         require(addr != address(0), "Cannot insert zero address");
-        require(id != (-1).toUint64(), "Cannot insert max uint64");
+        require(id != uint64(int64(-1)), "Cannot insert max uint64");
         // Ensure bijectivity of the mappings
         if (
             self.addressToId[addr] != 0 ||

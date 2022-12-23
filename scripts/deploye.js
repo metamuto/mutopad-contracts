@@ -3,11 +3,11 @@ const { ethers } = require('hardhat');
 const hre = require('hardhat');
 
 async function main() {
-  const EasyAuction = await hre.ethers.getContractFactory('EasyAuction');
-  const _EasyAuction = await EasyAuction.deploy();
+  const MutoPool = await hre.ethers.getContractFactory('MutoPool');
+  const _MutoPool = await MutoPool.deploy();
   console.log(
-    'EasyAuction deployed to:',
-    _EasyAuction.address,
+    'MutoPool deployed to:',
+    _MutoPool.address,
   );
 }
 
