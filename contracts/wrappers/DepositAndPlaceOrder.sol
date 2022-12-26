@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 pragma solidity >=0.6.8;
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "../MutoPool.sol";
@@ -8,7 +9,6 @@ contract DepositAndPlaceOrder {
     IWETH public immutable nativeTokenWrapper;
 
     constructor(address mutoPoolAddress, address _nativeTokenWrapper)
-        public
     {
         nativeTokenWrapper = IWETH(_nativeTokenWrapper);
         mutoPool = MutoPool(mutoPoolAddress);
