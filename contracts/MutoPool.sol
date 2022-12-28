@@ -65,6 +65,12 @@ contract MutoPool is Ownable {
     uint256 public feeNumerator = 0;
     uint256 public constant FEE_DENOMINATOR = 1000;
 
+    modifier iscancellledorDeleted(uint256 auctioId) {
+        require(!auctionData[auctioId].isScam);
+        require(!auctionData[auctioId].isDeleted);
+        _;
+    }
+
     modifier atStageOrderPlacementAndCancelation(uint256 auctionId) {
         require(
             block.timestamp < auctionData[auctionId].initData.orderCancellationEndDate,
@@ -198,12 +204,6 @@ contract MutoPool is Ownable {
             return auctionCounter;
         }
 
-
-    function updateAuctionDetailsHash(uint256 _auctionId, string memory _detailsHash) public {
-        require(auctionData[_auctionId].poolOwner == msg.sender);
-        auctionData[_auctionId].initData.formHash = _detailsHash;
-    }
-
     function markSpam(uint256 auctioId) external onlyOwner returns(bool){
         auctionData[auctioId].isScam = true;
         return true;
@@ -220,6 +220,15 @@ contract MutoPool is Ownable {
         auctionData[auctionId].initData.orderCancellationEndDate = _cancelTime;
         auctionData[auctionId].initData.minFundingThreshold = _fundingThreshold;
         auctionData[auctionId].initData.minimumBiddingAmountPerOrder = _minBid;
+        return true;
+    }
+
+    function updateAuctionUser(uint256 auctionId, uint40 _startTime, uint40 _endTime, uint40 _cancelTime, string memory _formHash) external returns(bool){
+        require(msg.sender==auctionData[auctioId].poolOwner);
+        auctionData[auctionId].initData.auctionStartDate = _startTime;
+        auctionData[auctionId].initData.auctionEndDate = _endTime;
+        auctionData[auctionId].initData.orderCancellationEndDate = _cancelTime;
+        auctionData[auctioId].initData.formHash = formHash;
         return true;
     }
         
