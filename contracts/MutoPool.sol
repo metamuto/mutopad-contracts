@@ -192,21 +192,10 @@ contract MutoPool is Ownable {
             return auctionCounter;
         }
 
-    function markScam(uint256 auctionId) external onlyOwner return (bool){
-        auctionData[auctionId].isScam = true;
-        return true;
-    }
 
-    function deleteAuction(uint256 auctionId) external onlyOwner returns(bool){
-        auctionData[auctionId].isDeleted = true;
-        return true;
-    }
-
-
-    function updateAuctionDetailsHash(uint256 _auctionId, string memory _detailsHash) external return(bool) {
+    function updateAuctionDetailsHash(uint256 _auctionId, string memory _detailsHash) public {
         require(auctionData[_auctionId].poolOwner == msg.sender);
         auctionData[_auctionId].initData.formHash = _detailsHash;
-        return true;
     } 
 
         
@@ -657,7 +646,7 @@ contract MutoPool is Ownable {
                 sumAuctioningTokenAmount,
                 sumBiddingTokenAmount,
                 userId
-            );
+            ); //[3]
         }   
         
         
@@ -668,6 +657,7 @@ contract MutoPool is Ownable {
             require(
                 newFeeNumerator <= 15
             );
+            // caution: for currently running auctions, the feeReceiverUserId is changing as well.
             feeReceiverUserId = getUserId(newfeeReceiverAddress);
             feeNumerator = newFeeNumerator;
         }
@@ -695,7 +685,7 @@ contract MutoPool is Ownable {
         
         
     function registerUser(address user) public returns (uint64 userId) {
-            numUsers = numUsers.add(uint64(1));
+            numUsers = numUsers.add(uint64(1))
             require(
                 registeredUsers.insert(numUsers, user),
                 "User Exists"
