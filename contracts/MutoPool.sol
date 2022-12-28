@@ -9,17 +9,17 @@ import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 struct InitialAuctionData{
-    string formHash;
-    IERC20 auctioningToken;
-    IERC20 biddingToken;
-    uint40 orderCancellationEndDate;
-    uint40 auctionStartDate;
-    uint40 auctionEndDate;
-    uint96 auctionedSellAmount;
-    uint96 minBuyAmount;
-    uint256 minimumBiddingAmountPerOrder;
-    uint256 minFundingThreshold;
-    bool isAtomicClosureAllowed;
+    string formHash; // admin e,user e
+    IERC20 auctioningToken; // x
+    IERC20 biddingToken; // x
+    uint40 orderCancellationEndDate; // admin e before end date, user x
+    uint40 auctionStartDate; // user x, admin can update before start
+    uint40 auctionEndDate; // user x, admin can update before end
+    uint96 auctionedSellAmount; // x
+    uint96 minBuyAmount; // x
+    uint256 minimumBiddingAmountPerOrder; // admin e before end, user x
+    uint256 minFundingThreshold; // x
+    bool isAtomicClosureAllowed; // x
 }
     
 struct AuctionData {
