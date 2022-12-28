@@ -192,10 +192,21 @@ contract MutoPool is Ownable {
             return auctionCounter;
         }
 
+    function markScam(uint256 auctionId) external onlyOwner return (bool){
+        auctionData[auctionId].isScam = true;
+        return true;
+    }
 
-    function updateAuctionDetailsHash(uint256 _auctionId, string memory _detailsHash) public {
+    function deleteAuction(uint256 auctionId) external onlyOwner returns(bool){
+        auctionData[auctionId].isDeleted = true;
+        return true;
+    }
+
+
+    function updateAuctionDetailsHash(uint256 _auctionId, string memory _detailsHash) external return(bool) {
         require(auctionData[_auctionId].poolOwner == msg.sender);
         auctionData[_auctionId].initData.formHash = _detailsHash;
+        return true;
     } 
 
         
