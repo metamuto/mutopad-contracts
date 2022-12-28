@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
-pragma solidity >=0.6.8;
+pragma solidity ^0.8.0;
+
 
 import "./libraries/IdToAddressBiMap.sol";
 import "./libraries/IterableOrderedOrderSet.sol";
@@ -7,6 +8,7 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "./libraries/SafeCast.sol";
 
 struct InitialAuctionData{
     string formHash;
@@ -43,6 +45,8 @@ contract MutoPool is Ownable {
     using SafeMath for uint64;
     using SafeMath for uint96;
     using SafeMath for uint256;
+    using SafeCast for uint256;
+    //using SafeCast for uint64;
 
     using IterableOrderedOrderSet for bytes32;
     using IdToAddressBiMap for IdToAddressBiMap.Data;
@@ -97,7 +101,8 @@ contract MutoPool is Ownable {
         uint96 _auctionedSellAmount,
         uint96 _minBuyAmount,
         uint256 minimumBiddingAmountPerOrder,
-        uint256 minFundingThreshold
+        uint256 minFundingThreshold,
+        string formHash
     );
 
     event ClaimedFromOrder(
@@ -146,13 +151,13 @@ contract MutoPool is Ownable {
                     FEE_DENOMINATOR);
             require(_initData.auctioningToken != _initData.biddingToken);
             require(_initData.auctioningToken.balanceOf(msg.sender)>=_ammount);
-            require(block.timestamp<_initData.auctionStartDate<_initData.auctionEndDate);
+            require(block.timestamp<_initData.auctionStartDate && _initData.auctionStartDate<_initData.auctionEndDate);
             require(_initData.auctionedSellAmount > 0);
             require(_initData.minBuyAmount > 0);
             require(_initData.minimumBiddingAmountPerOrder > 0);
             require(_initData.orderCancellationEndDate <= _initData.auctionEndDate);
             require(_initData.auctionEndDate > block.timestamp);
-            _auctioningToken.safeTransferFrom(
+            _initData.auctioningToken.safeTransferFrom(
                 msg.sender,
                 address(this),
                 _ammount
@@ -187,7 +192,8 @@ contract MutoPool is Ownable {
                 _initData.auctionedSellAmount,
                 _initData.minBuyAmount,
                 _initData.minimumBiddingAmountPerOrder,
-                _initData.minFundingThreshold
+                _initData.minFundingThreshold,
+                _initData.formHash
             );
             return auctionCounter;
         }
@@ -196,8 +202,26 @@ contract MutoPool is Ownable {
     function updateAuctionDetailsHash(uint256 _auctionId, string memory _detailsHash) public {
         require(auctionData[_auctionId].poolOwner == msg.sender);
         auctionData[_auctionId].initData.formHash = _detailsHash;
-    } 
+    }
 
+    function markSpam(uint256 auctioId) external onlyOwner returns(bool){
+        auctionData[auctioId].isScam = true;
+        return true;
+    }
+
+    function deletAuction(uint256 auctioId) external onlyOwner returns(bool){
+        auctionData[auctioId].isDeleted = true;
+        return true;
+    }
+
+    function updateAuctionAdmin(uint256 auctionId, uint40 _startTime, uint40 _endTime, uint40 _cancelTime, uint256 _fundingThreshold,uint256 _minBid ) external onlyOwner returns(bool){
+        auctionData[auctionId].initData.auctionStartDate = _startTime;
+        auctionData[auctionId].initData.auctionEndDate = _endTime;
+        auctionData[auctionId].initData.orderCancellationEndDate = _cancelTime;
+        auctionData[auctionId].initData.minFundingThreshold = _fundingThreshold;
+        auctionData[auctionId].initData.minimumBiddingAmountPerOrder = _minBid;
+        return true;
+    }
         
     function placeSellOrders(
             uint256 auctionId,
@@ -496,7 +520,7 @@ contract MutoPool is Ownable {
                     clearingOrder = IterableOrderedOrderSet.encodeOrder(
                         0,
                         fullAuctionedAmount,
-                        currentBidSum.toUint96()
+                       uint96 (currentBidSum)
                     );
                 }
             } else {
@@ -646,7 +670,7 @@ contract MutoPool is Ownable {
                 sumAuctioningTokenAmount,
                 sumBiddingTokenAmount,
                 userId
-            ); //[3]
+            );
         }   
         
         
@@ -657,7 +681,6 @@ contract MutoPool is Ownable {
             require(
                 newFeeNumerator <= 15
             );
-            // caution: for currently running auctions, the feeReceiverUserId is changing as well.
             feeReceiverUserId = getUserId(newfeeReceiverAddress);
             feeNumerator = newFeeNumerator;
         }
@@ -685,7 +708,7 @@ contract MutoPool is Ownable {
         
         
     function registerUser(address user) public returns (uint64 userId) {
-            numUsers = numUsers.add(uint64(1))
+            numUsers = numUsers.add(1).toUint64();
             require(
                 registeredUsers.insert(numUsers, user),
                 "User Exists"
