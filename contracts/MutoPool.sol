@@ -65,10 +65,9 @@ contract MutoPool is Ownable {
     uint256 public feeNumerator = 0;
     uint256 public constant FEE_DENOMINATOR = 1000;
 
-    modifier iscancellledorDeleted(uint256 auctioId) {
+    function iscancellledorDeleted(uint256 auctioId) internal view{
         require(!auctionData[auctioId].isScam);
         require(!auctionData[auctioId].isDeleted);
-        _;
     }
 
     modifier atStageOrderPlacementAndCancelation(uint256 auctionId) {
@@ -94,6 +93,8 @@ contract MutoPool is Ownable {
 
     modifier atStageSolutionSubmission(uint256 auctionId) {
         solutionSubmission(auctionId);
+        iscancellledorDeleted(auctionId);
+
         _;
     }
 
@@ -224,11 +225,11 @@ contract MutoPool is Ownable {
     }
 
     function updateAuctionUser(uint256 auctionId, uint40 _startTime, uint40 _endTime, uint40 _cancelTime, string memory _formHash) external returns(bool){
-        require(msg.sender==auctionData[auctioId].poolOwner);
+        require(msg.sender==auctionData[auctionId].poolOwner);
         auctionData[auctionId].initData.auctionStartDate = _startTime;
         auctionData[auctionId].initData.auctionEndDate = _endTime;
         auctionData[auctionId].initData.orderCancellationEndDate = _cancelTime;
-        auctionData[auctioId].initData.formHash = formHash;
+        auctionData[auctionId].initData.formHash = _formHash;
         return true;
     }
         
