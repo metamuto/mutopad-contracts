@@ -45,6 +45,10 @@ library IterableOrderedOrderSet {
         return self.nextMap[QUEUE_START] == QUEUE_END;
     }
 
+    function getCurrent(Data storage self) internal view returns(bytes32){
+        return self.prevMap[QUEUE_END];
+    }
+
     function insert(
         Data storage self,
         bytes32 elementToInsert,

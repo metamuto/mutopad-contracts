@@ -150,6 +150,13 @@ contract MutoPool is Ownable {
         uint64 userId
     );
     
+
+  function getCurrentAuctionPrice(uint256 _auctionId) external view returns(uint){
+    bytes32 memory current = sellOrders[_auctionId].getCurrent();
+    (, uint96 buyAmount, uint96 sellAmount) =
+                current.decodeOrder();
+    return sellAmount.div(buyAmount);
+  }
     
   function initiateAuction(
             InitialAuctionData calldata _initData
