@@ -8,6 +8,7 @@
     "hardhat": "^2.12.4"
   },
   "dependencies": {
-    "hardhat-contract-sizer": "^2.6.1"
+    "hardhat-contract-sizer": "^2.6.1",
+    "solhint": "^3.3.7"
   }
 }

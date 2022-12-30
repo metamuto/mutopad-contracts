@@ -93,7 +93,7 @@ contract MutoPool is Ownable {
 
     modifier atStageSolutionSubmission(uint256 auctionId) {
         solutionSubmission(auctionId);
-        iscancellledorDeleted(auctionId);
+        iscancellledorDeleted(auctionId);   
 
         _;
     }
@@ -124,7 +124,7 @@ contract MutoPool is Ownable {
         uint96 soldAuctioningTokens,
         uint96 soldBiddingTokens,
         bytes32 clearingPriceOrder
-    );
+    );    
 
     event NewSellOrder(
         uint256 indexed auctionId,
@@ -137,7 +137,7 @@ contract MutoPool is Ownable {
         uint256 indexed auctionId,
         uint64 indexed userId,
         uint96 buyAmount,
-        uint96 sellAmount
+        uint96 sellAmount    
     );
 
     event NewUser(
@@ -151,7 +151,7 @@ contract MutoPool is Ownable {
     );
     
     
-    function initiateAuction(
+  function initiateAuction(
             InitialAuctionData calldata _initData
         ) public returns (uint256) {
             uint256 _ammount = _initData.auctionedSellAmount.mul(FEE_DENOMINATOR.add(feeNumerator)).div(
@@ -205,32 +205,28 @@ contract MutoPool is Ownable {
             return auctionCounter;
         }
 
-    function markSpam(uint256 auctioId) external onlyOwner returns(bool){
+    function markSpam(uint256 auctioId) external onlyOwner{
         auctionData[auctioId].isScam = true;
-        return true;
     }
 
-    function deletAuction(uint256 auctioId) external onlyOwner returns(bool){
+    function deletAuction(uint256 auctioId) external onlyOwner{
         auctionData[auctioId].isDeleted = true;
-        return true;
     }
 
-    function updateAuctionAdmin(uint256 auctionId, uint40 _startTime, uint40 _endTime, uint40 _cancelTime, uint256 _fundingThreshold,uint256 _minBid ) external onlyOwner returns(bool){
+    function updateAuctionAdmin(uint256 auctionId, uint40 _startTime, uint40 _endTime, uint40 _cancelTime, uint256 _fundingThreshold,uint256 _minBid ) external onlyOwner {
         auctionData[auctionId].initData.auctionStartDate = _startTime;
         auctionData[auctionId].initData.auctionEndDate = _endTime;
         auctionData[auctionId].initData.orderCancellationEndDate = _cancelTime;
         auctionData[auctionId].initData.minFundingThreshold = _fundingThreshold;
         auctionData[auctionId].initData.minimumBiddingAmountPerOrder = _minBid;
-        return true;
     }
 
-    function updateAuctionUser(uint256 auctionId, uint40 _startTime, uint40 _endTime, uint40 _cancelTime, string memory _formHash) external returns(bool){
+    function updateAuctionUser(uint256 auctionId, uint40 _startTime, uint40 _endTime, uint40 _cancelTime, string memory _formHash) external{
         require(msg.sender==auctionData[auctionId].poolOwner);
         auctionData[auctionId].initData.auctionStartDate = _startTime;
         auctionData[auctionId].initData.auctionEndDate = _endTime;
         auctionData[auctionId].initData.orderCancellationEndDate = _cancelTime;
         auctionData[auctionId].initData.formHash = _formHash;
-        return true;
     }
         
     function placeSellOrders(
