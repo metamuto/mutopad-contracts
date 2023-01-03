@@ -102,6 +102,7 @@ contract MutoPool is Ownable {
         uint256 indexed auctionId,
         IERC20 indexed _auctioningToken,
         IERC20 indexed _biddingToken,
+        uint256 auctionStartDate,
         uint256 orderCancellationEndDate,
         uint256 auctionEndDate,
         uint64 userId,
@@ -117,6 +118,24 @@ contract MutoPool is Ownable {
         uint64 indexed userId,
         uint96 buyAmount,
         uint96 sellAmount
+    );
+
+    event UserEditted(
+        uint256 indexed auctionId,
+        uint256 auctionStartDate,
+        uint256 auctionEndDate,
+        uint256 orderCancellationEndDate,
+        string formHash
+
+
+    );
+    event AdminEditted(
+        uint256 indexed auctionId,
+        uint256 auctionStartDate,
+        uint256 auctionEndDate,
+        uint256 orderCancellationEndDate,
+        uint256 minimumBiddingAmountPerOrder,
+        uint256 minFundingThreshold
     );
 
     event AuctionCleared(
@@ -200,6 +219,7 @@ contract MutoPool is Ownable {
                 auctionCounter,
                 _initData.auctioningToken,
                 _initData.biddingToken,
+                _initData.auctionStartDate,
                 _initData.orderCancellationEndDate,
                 _initData.auctionEndDate,
                 userId,
@@ -226,6 +246,14 @@ contract MutoPool is Ownable {
         auctionData[auctionId].initData.orderCancellationEndDate = _cancelTime;
         auctionData[auctionId].initData.minFundingThreshold = _fundingThreshold;
         auctionData[auctionId].initData.minimumBiddingAmountPerOrder = _minBid;
+        emit AdminEditted(
+            auctionId,
+            _startTime,
+            _endTime,
+            _cancelTime,
+            _minBid,
+            _fundingThreshold
+        );
     }
 
     function updateAuctionUser(uint256 auctionId, uint40 _startTime, uint40 _endTime, uint40 _cancelTime, string memory _formHash) external{
@@ -234,6 +262,13 @@ contract MutoPool is Ownable {
         auctionData[auctionId].initData.auctionEndDate = _endTime;
         auctionData[auctionId].initData.orderCancellationEndDate = _cancelTime;
         auctionData[auctionId].initData.formHash = _formHash;
+        emit UserEditted(
+            auctionId,
+            _startTime,
+            _endTime,
+            _cancelTime,
+            _formHash
+        );
     }
         
     function placeSellOrders(
