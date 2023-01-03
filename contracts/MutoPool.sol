@@ -73,7 +73,7 @@ contract MutoPool is Ownable {
     modifier atStageOrderPlacementAndCancelation(uint256 auctionId) {
         require(
             block.timestamp < auctionData[auctionId].initData.orderCancellationEndDate,
-            "not in  placement/cancelation phase"
+            "Not in  placement/cancelation phase"
         );
         _;
     }
@@ -81,7 +81,7 @@ contract MutoPool is Ownable {
     modifier atStageFinished(uint256 auctionId) {
         require(
             auctionData[auctionId].clearingPriceOrder != bytes32(0),
-            "auction not finished"
+            "Auction not finished"
         );
         _;
     }
@@ -163,14 +163,14 @@ contract MutoPool is Ownable {
         ) public returns (uint256) {
             uint256 _ammount = _initData.auctionedSellAmount.mul(FEE_DENOMINATOR.add(feeNumerator)).div(
                     FEE_DENOMINATOR);
-            require(_initData.auctioningToken != _initData.biddingToken);
-            require(_initData.auctioningToken.balanceOf(msg.sender)>=_ammount);
-            require(block.timestamp<_initData.auctionStartDate && _initData.auctionStartDate<_initData.auctionEndDate);
-            require(_initData.auctionedSellAmount > 0);
-            require(_initData.minBuyAmount > 0);
-            require(_initData.minimumBiddingAmountPerOrder > 0);
-            require(_initData.orderCancellationEndDate <= _initData.auctionEndDate);
-            require(_initData.auctionEndDate > block.timestamp);
+            require(_initData.auctioningToken.balanceOf(msg.sender)>=_ammount, "Not enough balance");
+            require(block.timestamp<_initData.auctionStartDate && 
+                    _initData.auctionStartDate<_initData.auctionEndDate && 
+                    _initData.orderCancellationEndDate <= _initData.auctionEndDate &&
+                    _initData.auctionEndDate > block.timestamp, "Date not configured correctly");
+            require(_initData.auctionedSellAmount > 0 &&
+                    _initData.minBuyAmount > 0 &&
+                    _initData.minimumBiddingAmountPerOrder > 0,"Ammount can't be zero");
             _initData.auctioningToken.safeTransferFrom(
                 msg.sender,
                 address(this),
@@ -229,7 +229,7 @@ contract MutoPool is Ownable {
     }
 
     function updateAuctionUser(uint256 auctionId, uint40 _startTime, uint40 _endTime, uint40 _cancelTime, string memory _formHash) external{
-        require(msg.sender==auctionData[auctionId].poolOwner);
+        require(msg.sender==auctionData[auctionId].poolOwner, "Can be updated by pool owner only");
         auctionData[auctionId].initData.auctionStartDate = _startTime;
         auctionData[auctionId].initData.auctionEndDate = _endTime;
         auctionData[auctionId].initData.orderCancellationEndDate = _cancelTime;
@@ -448,7 +448,7 @@ contract MutoPool is Ownable {
         ) public atStageSolutionSubmission(auctionId) {
             require(
                 auctionData[auctionId].initData.isAtomicClosureAllowed,
-                "not allowed"
+                "Not autosettle allowed"
             );
             require(
                 _minBuyAmount.length == 1 && _sellAmount.length == 1
@@ -599,14 +599,14 @@ contract MutoPool is Ownable {
 
             require(
                 iterOrder != IterableOrderedOrderSet.QUEUE_END,
-                "reached end"
+                "Reached end"
             );
             (, uint96 buyAmountOfIter, uint96 selAmountOfIter) =
                 iterOrder.decodeOrder();
             require(
                 sumBidAmount.mul(buyAmountOfIter) <
                     auctioneerSellAmount.mul(selAmountOfIter),
-                "too many orders"
+                "Too many orders"
             );
 
             auctionData[auctionId].interimSumBidAmount = sumBidAmount;
@@ -630,7 +630,7 @@ contract MutoPool is Ownable {
                 // no new elements need to be inserted.
                 require(
                     sellOrders[auctionId].remove(orders[i]),
-                    "order not claimable"
+                    "Order not claimable"
                 );
             }
             AuctionData memory auction = auctionData[auctionId];
@@ -644,7 +644,7 @@ contract MutoPool is Ownable {
                     orders[i].decodeOrder();
                 require(
                     userIdOrder == userId,
-                    "Claimable by user"
+                    "Claimable by user only"
                 );
                 if (minFundingThresholdNotReached) {
                     //[10]
@@ -724,7 +724,7 @@ contract MutoPool is Ownable {
             numUsers = numUsers.add(1).toUint64();
             require(
                 registeredUsers.insert(numUsers, user),
-                "User Exists"
+                "User already exists"
             );
             userId = numUsers;
             emit UserRegistration(user, userId);
@@ -742,7 +742,7 @@ contract MutoPool is Ownable {
 
 
     function getFormHash(uint256 auction_id) public view returns(string memory){
-        require(auction_id<=auctionCounter, "Invalid Id");
+        require(auction_id<=auctionCounter, "Invali auction ID");
         return auctionData[auction_id].initData.formHash;
     }
 

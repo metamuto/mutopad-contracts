@@ -29,4 +29,21 @@ describe("Token contract", async function () {
         const DENOMINATOR = await MutoPool.getUserId("0x7ACf46627094FA89339DB5b2EB862F0E8Ea4D9fc")
         expect(DENOMINATOR == 1000)
     });
+    it("Should initiate an auction", async function(){
+        const auctionId = await MutoPool.initiateAuction(
+            'Qme6YLJMPib75HVo6sNNQfeYcwnAm8bQmLdsS3SnfRN6tG',
+            '0xA3602F5a291093cc6f012EE9750F57c751aA6F02',
+            '0x45592625323b78460A7c093F4Fc32f6D22061a03',
+            '1772599600',
+            '1772513200',
+            '1772599600',
+            '10000000',
+            '100000',
+            '100000',
+            '5000000',
+            'false'
+
+        )
+        console.log('auctionId ', auctionId);
+    })
 });

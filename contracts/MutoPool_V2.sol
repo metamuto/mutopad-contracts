@@ -61,7 +61,7 @@ contract MutoPool is Ownable {
     constructor()  Ownable() {}
 
     uint64 public feeReceiverUserId = 1;
-    uint256 public feeNumerator = 0;
+    uint256 public feeNumerator = 15;
     uint256 public constant FEE_DENOMINATOR = 1000;
 
     function iscancellledorDeleted(uint256 auctioId) internal view{
@@ -171,13 +171,14 @@ contract MutoPool is Ownable {
         ) public returns (uint256) {
             uint256 _ammount = _auctionedSellAmount.mul(FEE_DENOMINATOR.add(feeNumerator)).div(
                     FEE_DENOMINATOR);
-            require(_auctioningToken.balanceOf(msg.sender)>=_ammount);
-            require(block.timestamp<_auctionStartDate && _auctionStartDate<_auctionEndDate);
-            require(_auctionedSellAmount > 0);
-            require(_minBuyAmount > 0);
-            require(_minimumBiddingAmountPerOrder > 0);
-            require(_orderCancellationEndDate <= _auctionEndDate);
-            require(_auctionEndDate > block.timestamp);
+            require(_auctioningToken.balanceOf(msg.sender)>=_ammount, "BNE");
+            require(block.timestamp<_auctionStartDate && 
+                    _auctionStartDate<_auctionEndDate && 
+                    _orderCancellationEndDate <= _auctionEndDate &&
+                    _auctionEndDate > block.timestamp, "DNCC");
+            require(_auctionedSellAmount > 0 &&
+                    _minBuyAmount > 0 &&
+                    _minimumBiddingAmountPerOrder > 0,"ACBZ");
             _auctioningToken.safeTransferFrom(
                 msg.sender,
                 address(this),
@@ -660,7 +661,7 @@ contract MutoPool is Ownable {
             uint256 newFeeNumerator,
             address newfeeReceiverAddress
         ) public onlyOwner() {
-            require(newFeeNumerator <= 15);
+            require(newFeeNumerator <= 15, "Fee can't be > 1.5%");
             feeReceiverUserId = getUserId(newfeeReceiverAddress);
             feeNumerator = newFeeNumerator;
         }
