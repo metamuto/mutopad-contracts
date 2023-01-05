@@ -123,9 +123,6 @@ contract MutoPool is Ownable {
 
     event UserEditted(
         uint256 indexed auctionId,
-        uint256 auctionStartDate,
-        uint256 auctionEndDate,
-        uint256 orderCancellationEndDate,
         string formHash
 
 
@@ -262,17 +259,11 @@ contract MutoPool is Ownable {
         );
     }
 
-    function updateAuctionUser(uint256 auctionId, uint40 _startTime, uint40 _endTime, uint40 _cancelTime, string memory _formHash) external{
+    function updateAuctionUser(uint256 auctionId,  string memory _formHash) external{
         require(msg.sender==auctionData[auctionId].poolOwner, "Can be updated by pool owner only");
-        auctionData[auctionId].initData.auctionStartDate = _startTime;
-        auctionData[auctionId].initData.auctionEndDate = _endTime;
-        auctionData[auctionId].initData.orderCancellationEndDate = _cancelTime;
         auctionData[auctionId].initData.formHash = _formHash;
         emit UserEditted(
             auctionId,
-            _startTime,
-            _endTime,
-            _cancelTime,
             _formHash
         );
     }
