@@ -100,17 +100,18 @@ contract MutoPool is Ownable {
 
     event NewAuction(
         uint256 indexed auctionId,
-        IERC20 indexed _auctioningToken,
-        IERC20 indexed _biddingToken,
-        uint256 auctionStartDate,
-        uint256 orderCancellationEndDate,
-        uint256 auctionEndDate,
-        uint64 userId,
-        uint96 _auctionedSellAmount,
-        uint96 _minBuyAmount,
-        uint256 minimumBiddingAmountPerOrder,
-        uint256 minFundingThreshold,
-        string formHash
+        uint256 indexed userId,
+        address indexed poolOwner,
+        InitialAuctionData initData,
+        bytes32 initialAuctionOrder,
+        uint256 interimsumBidAmount,
+        bytes32 interimOrder,
+        bytes32 clearingPriceOrder,
+        uint96 volumeClearingOrder,
+        bool minimumFundingThresholdReached,
+        uint256 feeNumerator,
+        bool isScam,
+        bool isDeleted
     );
 
     event ClaimedFromOrder(
@@ -217,17 +218,22 @@ contract MutoPool is Ownable {
             );
             emit NewAuction(
                 auctionCounter,
-                _initData.auctioningToken,
-                _initData.biddingToken,
-                _initData.auctionStartDate,
-                _initData.orderCancellationEndDate,
-                _initData.auctionEndDate,
                 userId,
-                _initData.auctionedSellAmount,
-                _initData.minBuyAmount,
-                _initData.minimumBiddingAmountPerOrder,
-                _initData.minFundingThreshold,
-                _initData.formHash
+                msg.sender,
+                _initData,
+                IterableOrderedOrderSet.encodeOrder(
+                    userId,
+                    _initData.minBuyAmount,
+                    _initData.auctionedSellAmount
+                ),
+                0,
+                IterableOrderedOrderSet.QUEUE_START,
+                bytes32(0),
+                0,
+                false,
+                feeNumerator,
+                false,
+                false
             );
             return auctionCounter;
         }

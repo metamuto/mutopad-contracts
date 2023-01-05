@@ -1,10 +1,13 @@
 require('@nomiclabs/hardhat-waffle');
 require('@nomiclabs/hardhat-etherscan');
 require('hardhat-contract-sizer');
-
+require("hardhat-gas-reporter");
 
 module.exports = {
-
+  'gasReporter': {
+    'currency': 'CHF',
+    'gasPrice': 21
+  },
   'etherscan': {
     'apiKey': '6TKH29HCYTU6WHU2FF11QPATCY4UQ6HQ8G', 
   },

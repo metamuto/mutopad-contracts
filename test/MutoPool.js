@@ -30,6 +30,9 @@ describe("Token contract", async function () {
         expect(DENOMINATOR == 1000)
     });
     it("Should initiate an auction", async function(){
+        const [owner] = await ethers.getSigners();
+        const Token1 = await ethers.getContractFactory("MutoPool");
+        MutoPool = await Muto.deploy({ gasLimit: 3 * 10 ** 7});
         const auctionId = await MutoPool.initiateAuction(
             'Qme6YLJMPib75HVo6sNNQfeYcwnAm8bQmLdsS3SnfRN6tG',
             '0xA3602F5a291093cc6f012EE9750F57c751aA6F02',
