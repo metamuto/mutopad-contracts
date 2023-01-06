@@ -98,17 +98,30 @@ contract MutoPool is Ownable {
         _;
     }
 
-    event NewAuction(
+    event NewAuctionE1(
         uint256 indexed auctionId,
         uint256 indexed userId,
         address indexed poolOwner,
-        InitialAuctionData initData,
+        string formHash,
+        IERC20 auctioningToken,
+        IERC20 biddingToken,
+        uint40 orderCancellationEndDate,
+        uint40 auctionStartDate,
+        uint40 auctionEndDate,
+        uint96 auctionedSellAmount,
+        uint96 minBuyAmount
+    );
+    event NewAuctionE2(
+        uint256 indexed auctionId,
         bytes32 initialAuctionOrder,
         uint256 interimsumBidAmount,
         bytes32 interimOrder,
         bytes32 clearingPriceOrder,
         uint96 volumeClearingOrder,
         bool minimumFundingThresholdReached,
+        uint256 minimumBiddingAmountPerOrder,
+        uint256 minFundingThreshold,
+        bool isAtomicClosureAllowed,
         uint256 feeNumerator,
         bool isScam,
         bool isDeleted
@@ -213,11 +226,21 @@ contract MutoPool is Ownable {
                 false,
                 false
             );
-            emit NewAuction(
+            emit NewAuctionE1(
                 auctionCounter,
                 userId,
                 msg.sender,
-                _initData,
+                _initData.formHash,
+                _initData.auctioningToken,
+                _initData.biddingToken,
+                _initData.orderCancellationEndDate,
+                _initData.auctionStartDate,
+                _initData.auctionEndDate,
+                _initData.auctionedSellAmount,
+                _initData.minBuyAmount
+            );
+            emit NewAuctionE2(
+                auctionCounter,
                 IterableOrderedOrderSet.encodeOrder(
                     userId,
                     _initData.minBuyAmount,
@@ -228,6 +251,9 @@ contract MutoPool is Ownable {
                 bytes32(0),
                 0,
                 false,
+                 _initData.minimumBiddingAmountPerOrder,
+                _initData.minFundingThreshold,
+                _initData.isAtomicClosureAllowed,
                 feeNumerator,
                 false,
                 false
