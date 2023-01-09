@@ -257,7 +257,7 @@ contract MutoPool is Ownable {
         poolData[poolId].isScam = true;
         poolData[poolId].initData.poolingToken.safeTransfer(
                 msg.sender,
-                pooledSellAmount
+                poolData[poolId].initData.pooledSellAmount
             );
         
     }
@@ -266,7 +266,7 @@ contract MutoPool is Ownable {
         poolData[poolId].isDeleted = true;
         poolData[poolId].initData.poolingToken.safeTransfer(
                 msg.sender,
-                pooledSellAmount
+                poolData[poolId].initData.pooledSellAmount
             );
     }
 
