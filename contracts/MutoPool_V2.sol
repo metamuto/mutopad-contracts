@@ -255,10 +255,19 @@ contract MutoPool is Ownable {
 
     function markSpam(uint256 poolId) external onlyOwner{
         poolData[poolId].isScam = true;
+        poolData[poolId].initData.poolingToken.safeTransfer(
+                msg.sender,
+                pooledSellAmount
+            );
+        
     }
 
     function deletPool(uint256 poolId) external onlyOwner{
         poolData[poolId].isDeleted = true;
+        poolData[poolId].initData.poolingToken.safeTransfer(
+                msg.sender,
+                pooledSellAmount
+            );
     }
 
     function updatePoolAdmin(uint256 poolId, uint40 _startTime, uint40 _endTime, uint40 _cancelTime, uint256 _fundingThreshold,uint256 _minBid ) external onlyOwner{
