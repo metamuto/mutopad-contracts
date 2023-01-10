@@ -9,6 +9,7 @@ import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "./libraries/SafeCast.sol";
 
+// Pool input data
 struct InitialPoolData {
     string formHash;
     IERC20 poolingToken;
@@ -23,6 +24,7 @@ struct InitialPoolData {
     bool isAtomicClosureAllowed;
 }
 
+// Pool data
 struct PoolData {
     InitialPoolData initData;
     address poolOwner;
@@ -44,8 +46,7 @@ contract MutoPool is Ownable {
     using SafeMath for uint96;
     using SafeMath for uint256;
     using SafeCast for uint256;
-    //using SafeCast for uint64;
-
+    using SafeCast for uint64;
     using IterableOrderedOrderSet for bytes32;
     using IdToAddressBiMap for IdToAddressBiMap.Data;
     using IterableOrderedOrderSet for IterableOrderedOrderSet.Data;
@@ -63,23 +64,26 @@ contract MutoPool is Ownable {
     uint256 public feeNumerator = 15;
     uint256 public constant FEE_DENOMINATOR = 1000;
 
+    // To check if pool is marked scam or deleted
     modifier scammedOrDeleted(uint256 poolId) {
         require(
-            !poolData[poolId].isScam || poolData[poolId].isDeleted,
-            "Pool Scammed or Deleted"
-        );
+            poolData[poolId].isScam || poolData[poolId].isDeleted,
+            "Pool not Scammed or Deleted"
+        ); // pool should be scammed or deleted
         _;
     }
 
+    // To check if cancelation date is reached or not
     modifier atStageOrderPlacementAndCancelation(uint256 poolId) {
         require(
             block.timestamp <
                 poolData[poolId].initData.orderCancellationEndDate,
-            "Not in  placement/cancelation phase"
-        );
+            "Not in order placement/cancelation phase"
+        ); // cancellation date shouldn't have passed
         _;
     }
 
+    // To check if pool has finished
     modifier atStageFinished(uint256 poolId) {
         require(
             poolData[poolId].clearingPriceOrder != bytes32(0),
@@ -88,30 +92,40 @@ contract MutoPool is Ownable {
         _;
     }
 
+    // To check if pool end date is reached
     modifier atStageOrderPlacement(uint256 poolId) {
         require(
             block.timestamp < poolData[poolId].initData.poolEndDate,
             "Not in order placement phase"
-        );
+        ); // pool end date must not be reached
         _;
     }
 
+    // To check pool is not marked scam and deleted
     modifier isScammedOrDeleted(uint256 poolId) {
-        require(!poolData[poolId].isScam && !poolData[poolId].isDeleted, "Deleted or Scammed");
+        require(
+            !poolData[poolId].isScam && !poolData[poolId].isDeleted,
+            "Deleted or Scammed"
+        ); // poll must not be marked as deleted or scammed
         _;
     }
 
+    // To check if end date has reached and pool can be cleared
     modifier atStageSolutionSubmission(uint256 poolId) {
         require(
             poolData[poolId].initData.poolEndDate != 0 &&
                 block.timestamp >= poolData[poolId].initData.poolEndDate &&
                 poolData[poolId].clearingPriceOrder == bytes32(0),
             "Not in submission phase"
-        );
-        require(!poolData[poolId].isScam && !poolData[poolId].isDeleted, "Deleted or Scammed");
+        ); // pool end date must have reached
+        require(
+            !poolData[poolId].isScam && !poolData[poolId].isDeleted,
+            "Deleted or Scammed"
+        ); //pool must not be deleted or scamed
         _;
     }
 
+    // Both NewPoolE1 and NewPoolE2 are emitted on pool initialization
     event NewPoolE1(
         uint256 indexed poolId,
         uint256 indexed userId,
@@ -142,16 +156,16 @@ contract MutoPool is Ownable {
         bool isDeleted
     );
 
-    event ClaimedFromOrder(
+    event OrderClaimedByUser(
         uint256 indexed poolId,
         uint64 indexed userId,
         uint96 buyAmount,
         uint96 sellAmount
     );
 
-    event UserEditted(uint256 indexed poolId, string formHash);
+    event PoolEdittedByUser(uint256 indexed poolId, string formHash);
 
-    event AdminEditted(
+    event PoolEdittedByAdmin(
         uint256 indexed poolId,
         uint256 poolStartDate,
         uint256 poolEndDate,
@@ -167,7 +181,7 @@ contract MutoPool is Ownable {
         bytes32 clearingPriceOrder
     );
 
-    event NewSellOrder(
+    event NewSellOrderPlaced(
         uint256 indexed poolId,
         uint64 indexed userId,
         uint96 buyAmount,
@@ -175,7 +189,15 @@ contract MutoPool is Ownable {
         bytes32 sellOrder
     );
 
-    event CancellationSellOrder(
+    event SellOrderCancelled(
+        uint256 indexed poolId,
+        uint64 indexed userId,
+        uint96 buyAmount,
+        uint96 sellAmount,
+        bytes32 sellOrder
+    );
+
+    event OrderRefunded(
         uint256 indexed poolId,
         uint64 indexed userId,
         uint96 buyAmount,
@@ -187,18 +209,22 @@ contract MutoPool is Ownable {
 
     event UserRegistration(address indexed user, uint64 userId);
 
-    function getCurrentPoolPrice(uint256 _poolId)
-        external
-        view
-        returns (uint256)
-    {
-        bytes32 current = sellOrders[_poolId].getCurrent();
-        (, uint96 buyAmount, uint96 sellAmount) = current.decodeOrder();
-        return sellAmount.div(buyAmount);
+    function setFeeParameters(
+        uint256 newFeeNumerator,
+        address newfeeReceiverAddress
+    ) external onlyOwner {
+        require(newFeeNumerator <= 15); // pool fee can be maximum upto 1.5 %
+        feeReceiverUserId = getUserId(newfeeReceiverAddress);
+        feeNumerator = newFeeNumerator;
+    }
+
+    function CheckUserId(address userAddress) external view returns (uint64) {
+        require(registeredUsers.hasAddress(userAddress), "Not Registered Yet"); // user must be registered
+        return registeredUsers.getId(userAddress);
     }
 
     function initiatePool(InitialPoolData calldata _initData)
-        public
+        external
         returns (uint256)
     {
         uint256 _ammount = _initData
@@ -209,6 +235,8 @@ contract MutoPool is Ownable {
             _initData.poolingToken.balanceOf(msg.sender) >= _ammount,
             "Not enough balance"
         );
+        // dates must be configured carefully
+        // start date < cancellation date < end date
         require(
             block.timestamp < _initData.poolStartDate &&
                 _initData.poolStartDate < _initData.poolEndDate &&
@@ -217,11 +245,12 @@ contract MutoPool is Ownable {
             "Date not configured correctly"
         );
         require(
-            _initData.pooledSellAmount > 0 &&
-                _initData.minBuyAmount > 0 &&
-                _initData.minimumBiddingAmountPerOrder > 0,
+            _initData.pooledSellAmount > 0 && // ppled amount must be greater than zero
+                _initData.minBuyAmount > 0 && // minimum buy amount must be greater than zero
+                _initData.minimumBiddingAmountPerOrder > 0, // minimum sell amount of order must be grater than zero
             "Ammount can't be zero"
         );
+        // need to approve tokens to this contract
         _initData.poolingToken.safeTransferFrom(
             msg.sender,
             address(this),
@@ -282,20 +311,14 @@ contract MutoPool is Ownable {
         return poolCounter;
     }
 
-    function markSpam(uint256 poolId) external onlyOwner {
-        poolData[poolId].isScam = true;
-        poolData[poolId].initData.poolingToken.safeTransfer(
-                msg.sender,
-                poolData[poolId].initData.pooledSellAmount
-            );
-    }
-
-    function deletPool(uint256 poolId) external onlyOwner {
-        poolData[poolId].isDeleted = true;
-        poolData[poolId].initData.poolingToken.safeTransfer(
-                msg.sender,
-                poolData[poolId].initData.pooledSellAmount
-            );
+    function getFormHash(uint256 pool_id)
+        external
+        view
+        returns (string memory)
+    {
+        // pool must exist
+        require(pool_id <= poolCounter, "Invali pool ID");
+        return poolData[pool_id].initData.formHash;
     }
 
     function updatePoolAdmin(
@@ -311,7 +334,7 @@ contract MutoPool is Ownable {
         poolData[poolId].initData.orderCancellationEndDate = _cancelTime;
         poolData[poolId].initData.minFundingThreshold = _fundingThreshold;
         poolData[poolId].initData.minimumBiddingAmountPerOrder = _minBid;
-        emit AdminEditted(
+        emit PoolEdittedByAdmin(
             poolId,
             _startTime,
             _endTime,
@@ -327,7 +350,50 @@ contract MutoPool is Ownable {
             "Can be updated by pool owner only"
         );
         poolData[poolId].initData.formHash = _formHash;
-        emit UserEditted(poolId, _formHash);
+        emit PoolEdittedByUser(poolId, _formHash);
+    }
+
+    // To fetch the latest bid buy vs sell ratio
+    function getCurrentPoolPrice(uint256 _poolId)
+        external
+        view
+        returns (uint256)
+    {
+        bytes32 current = sellOrders[_poolId].getCurrent();
+        (, uint96 buyAmount, uint96 sellAmount) = current.decodeOrder();
+        // returns amount of bidding token per pooling token
+        return sellAmount.div(buyAmount);
+    }
+
+    function markSpam(uint256 poolId) external onlyOwner {
+        poolData[poolId].isScam = true;
+        // returns the funds to pooler
+        poolData[poolId].initData.poolingToken.safeTransfer(
+            msg.sender,
+            poolData[poolId].initData.pooledSellAmount
+        );
+    }
+
+    function deletPool(uint256 poolId) external onlyOwner {
+        poolData[poolId].isDeleted = true;
+        //returns the funds to pooler
+        poolData[poolId].initData.poolingToken.safeTransfer(
+            msg.sender,
+            poolData[poolId].initData.pooledSellAmount
+        );
+    }
+
+    function getEncodedOrder(
+        uint64 userId,
+        uint96 buyAmount,
+        uint96 sellAmount
+    ) external pure returns (bytes32) {
+        return
+            bytes32(
+                (uint256(userId) << 192) +
+                    (uint256(buyAmount) << 96) +
+                    uint256(sellAmount)
+            );
     }
 
     function placeSellOrders(
@@ -373,71 +439,8 @@ contract MutoPool is Ownable {
             );
     }
 
-    function _placeSellOrders(
-        uint256 poolId,
-        uint96[] memory _minBuyAmounts,
-        uint96[] memory _sellAmounts,
-        bytes32[] memory _prevSellOrders,
-        address orderSubmitter
-    ) internal returns (uint64 userId) {
-        {
-            (
-                ,
-                uint96 buyAmountOfInitialPoolOrder,
-                uint96 sellAmountOfInitialPoolOrder
-            ) = poolData[poolId].initialPoolOrder.decodeOrder();
-            for (uint256 i = 0; i < _minBuyAmounts.length; i++) {
-                require(
-                    _minBuyAmounts[i].mul(buyAmountOfInitialPoolOrder) <
-                        sellAmountOfInitialPoolOrder.mul(_sellAmounts[i]),
-                    "limit price is <  min offer"
-                );
-            }
-        }
-        uint256 sumOfSellAmounts = 0;
-        userId = getUserId(orderSubmitter);
-        uint256 minimumBiddingAmountPerOrder = poolData[poolId]
-            .initData
-            .minimumBiddingAmountPerOrder;
-        for (uint256 i = 0; i < _minBuyAmounts.length; i++) {
-            require(_minBuyAmounts[i] > 0, "buyAmounts must be < 0");
-            require(
-                _sellAmounts[i] > minimumBiddingAmountPerOrder,
-                "order too small"
-            );
-            if (
-                sellOrders[poolId].insert(
-                    IterableOrderedOrderSet.encodeOrder(
-                        userId,
-                        _minBuyAmounts[i],
-                        _sellAmounts[i]
-                    ),
-                    _prevSellOrders[i]
-                )
-            ) {
-                sumOfSellAmounts = sumOfSellAmounts.add(_sellAmounts[i]);
-                emit NewSellOrder(
-                    poolId,
-                    userId,
-                    _minBuyAmounts[i],
-                    _sellAmounts[i],
-                    IterableOrderedOrderSet.encodeOrder(
-                        userId,
-                        _minBuyAmounts[i],
-                        _sellAmounts[i]
-                    )
-                );
-            }
-        }
-        poolData[poolId].initData.biddingToken.safeTransferFrom(
-            msg.sender,
-            address(this),
-            sumOfSellAmounts
-        ); //[1]
-    }
-
     function cancelSellOrders(uint256 poolId, bytes32[] memory _sellOrders)
-        public
+        external
         atStageOrderPlacementAndCancelation(poolId)
         isScammedOrDeleted(poolId)
     {
@@ -451,9 +454,10 @@ contract MutoPool is Ownable {
                     uint96 buyAmountOfIter,
                     uint96 sellAmountOfIter
                 ) = _sellOrders[i].decodeOrder();
-                require(userIdOfIter == userId, "user can cancel");
+                // User must be order placer
+                require(userIdOfIter == userId, "Only order placer can cancel");
                 claimableAmount = claimableAmount.add(sellAmountOfIter);
-                emit CancellationSellOrder(
+                emit SellOrderCancelled(
                     poolId,
                     userId,
                     buyAmountOfIter,
@@ -465,68 +469,83 @@ contract MutoPool is Ownable {
         poolData[poolId].initData.biddingToken.safeTransfer(
             msg.sender,
             claimableAmount
-        ); //[2]
+        );
     }
 
-    function sendOutTokens(
-        uint256 poolId,
-        uint256 poolingTokenAmount,
-        uint256 biddingTokenAmount,
-        uint64 userId
-    ) internal {
-        address userAddress = registeredUsers.getAddressAt(userId);
-        if (poolingTokenAmount > 0) {
-            poolData[poolId].initData.poolingToken.safeTransfer(
-                userAddress,
-                poolingTokenAmount
-            );
-        }
-        if (biddingTokenAmount > 0) {
-            poolData[poolId].initData.biddingToken.safeTransfer(
-                userAddress,
-                biddingTokenAmount
-            );
-        }
+    function refundOrder(uint256 poolId, bytes32 order)
+        external
+        scammedOrDeleted(poolId)
+    {
+        // check if order exists
+        require(sellOrders[poolId].remove(order), "Order not refundable");
+        uint64 userId = getUserId(msg.sender);
+        (uint64 userIdOrder, uint96 buyAmount, uint96 sellAmount) = order
+            .decodeOrder();
+        // check if user is order placer
+        require(userIdOrder == userId, "Not Order Placer");
+        poolData[poolId].initData.biddingToken.safeTransfer(
+            msg.sender,
+            sellAmount
+        );
+        emit OrderRefunded(poolId, userId, buyAmount, sellAmount, order);
     }
 
-    function processFeesAndPoolerFunds(
-        uint256 poolId,
-        uint256 fillVolumeOfPoolerOrder,
-        uint64 poolerId,
-        uint96 fullPooledAmount
-    ) internal {
-        uint256 feeAmount = fullPooledAmount
-            .mul(poolData[poolId].feeNumerator)
-            .div(FEE_DENOMINATOR); //[20]
-        if (poolData[poolId].minFundingThresholdNotReached) {
-            sendOutTokens(poolId, fullPooledAmount.add(feeAmount), 0, poolerId); //[4]
-        } else {
-            //[11]
-            (, uint96 priceNumerator, uint96 priceDenominator) = poolData[
-                poolId
-            ].clearingPriceOrder.decodeOrder();
-            uint256 unsettledPoolTokens = fullPooledAmount.sub(
-                fillVolumeOfPoolerOrder
+    function claimFromParticipantOrder(uint256 poolId, bytes32[] memory orders)
+        external
+        atStageFinished(poolId)
+        isScammedOrDeleted(poolId)
+        returns (uint256 sumPoolingTokenAmount, uint256 sumBiddingTokenAmount)
+    {
+        for (uint256 i = 0; i < orders.length; i++) {
+            require(
+                sellOrders[poolId].remove(orders[i]),
+                "Order not claimable"
             );
-            uint256 poolingTokenAmount = unsettledPoolTokens.add(
-                feeAmount.mul(unsettledPoolTokens).div(fullPooledAmount)
-            );
-            uint256 biddingTokenAmount = fillVolumeOfPoolerOrder
-                .mul(priceDenominator)
-                .div(priceNumerator);
-            sendOutTokens(
-                poolId,
-                poolingTokenAmount,
-                biddingTokenAmount,
-                poolerId
-            ); //[5]
-            sendOutTokens(
-                poolId,
-                feeAmount.mul(fillVolumeOfPoolerOrder).div(fullPooledAmount),
-                0,
-                feeReceiverUserId
-            ); //[7]
         }
+        PoolData memory pool = poolData[poolId];
+        (, uint96 priceNumerator, uint96 priceDenominator) = pool
+            .clearingPriceOrder
+            .decodeOrder();
+        (uint64 userId, , ) = orders[0].decodeOrder();
+        bool minFundingThresholdNotReached = poolData[poolId]
+            .minFundingThresholdNotReached;
+        for (uint256 i = 0; i < orders.length; i++) {
+            (uint64 userIdOrder, uint96 buyAmount, uint96 sellAmount) = orders[
+                i
+            ].decodeOrder();
+            require(userIdOrder == userId, "Claimable by user only");
+            if (minFundingThresholdNotReached) {
+                sumBiddingTokenAmount = sumBiddingTokenAmount.add(sellAmount);
+            } else {
+                if (orders[i] == pool.clearingPriceOrder) {
+                    sumPoolingTokenAmount = sumPoolingTokenAmount.add(
+                        pool.volumeClearingPriceOrder.mul(priceNumerator).div(
+                            priceDenominator
+                        )
+                    );
+                    sumBiddingTokenAmount = sumBiddingTokenAmount.add(
+                        sellAmount.sub(pool.volumeClearingPriceOrder)
+                    );
+                } else {
+                    if (orders[i].smallerThan(pool.clearingPriceOrder)) {
+                        sumPoolingTokenAmount = sumPoolingTokenAmount.add(
+                            sellAmount.mul(priceNumerator).div(priceDenominator)
+                        );
+                    } else {
+                        sumBiddingTokenAmount = sumBiddingTokenAmount.add(
+                            sellAmount
+                        );
+                    }
+                }
+            }
+            emit OrderClaimedByUser(poolId, userId, buyAmount, sellAmount);
+        }
+        sendOutTokens(
+            poolId,
+            sumPoolingTokenAmount,
+            sumBiddingTokenAmount,
+            userId
+        );
     }
 
     function settlePoolAtomically(
@@ -534,7 +553,7 @@ contract MutoPool is Ownable {
         uint96[] memory _minBuyAmount,
         uint96[] memory _sellAmount,
         bytes32[] memory _prevSellOrder
-    ) public atStageSolutionSubmission(poolId) {
+    ) external atStageSolutionSubmission(poolId) {
         require(
             poolData[poolId].initData.isAtomicClosureAllowed,
             "Not autosettle allowed"
@@ -560,6 +579,42 @@ contract MutoPool is Ownable {
         settlePool(poolId);
     }
 
+    function registerUser(address user) public returns (uint64 userId) {
+        numUsers = numUsers.add(1).toUint64();
+        // check if user already registered
+        require(registeredUsers.insert(numUsers, user), "User already exists");
+        userId = numUsers;
+        emit UserRegistration(user, userId);
+    }
+
+    function getUserId(address user) public returns (uint64 userId) {
+        if (registeredUsers.hasAddress(user)) {
+            userId = registeredUsers.getId(user);
+        } else {
+            userId = registerUser(user);
+            emit NewUser(userId, user);
+        }
+    }
+
+    function getSecondsRemainingInBatch(uint256 poolId)
+        public
+        view
+        returns (uint256)
+    {
+        if (poolData[poolId].initData.poolEndDate < block.timestamp) {
+            return 0;
+        }
+        return poolData[poolId].initData.poolEndDate.sub(block.timestamp);
+    }
+
+    function containsOrder(uint256 poolId, bytes32 order)
+        public
+        view
+        returns (bool)
+    {
+        return sellOrders[poolId].contains(order);
+    }
+
     function settlePool(uint256 poolId)
         public
         atStageSolutionSubmission(poolId)
@@ -576,7 +631,6 @@ contract MutoPool is Ownable {
         uint256 buyAmountOfIter;
         uint256 sellAmountOfIter;
         uint96 fillVolumeOfPoolerOrder = fullPooledAmount;
-        // Sum order up, until fullPooledAmount is fully bought or queue end is reached
         do {
             bytes32 nextOrder = sellOrders[poolId].next(currentOrder);
             if (nextOrder == IterableOrderedOrderSet.QUEUE_END) {
@@ -595,15 +649,11 @@ contract MutoPool is Ownable {
             currentBidSum.mul(buyAmountOfIter) >=
             fullPooledAmount.mul(sellAmountOfIter)
         ) {
-            // All considered/summed orders are sufficient to close the pool fully
-            // at price between current and previous orders.
             uint256 uncoveredBids = currentBidSum.sub(
                 fullPooledAmount.mul(sellAmountOfIter).div(buyAmountOfIter)
             );
 
             if (sellAmountOfIter >= uncoveredBids) {
-                //[13]
-                // Pool fully filled via partial match of currentOrder
                 uint256 sellAmountClearingOrder = sellAmountOfIter.sub(
                     uncoveredBids
                 );
@@ -628,8 +678,6 @@ contract MutoPool is Ownable {
                     currentBidSum.toUint96()
                 );
             } else {
-                //[16]
-                // Even at the initial pool price, the pool is partially filled
                 clearingOrder = IterableOrderedOrderSet.encodeOrder(
                     0,
                     fullPooledAmount,
@@ -681,6 +729,7 @@ contract MutoPool is Ownable {
             sumBidAmount = sumBidAmount.add(sellAmountOfIter);
         }
 
+        // current iteration order is not the end of order que
         require(iterOrder != IterableOrderedOrderSet.QUEUE_END, "Reached end");
         (, uint96 buyAmountOfIter, uint96 selAmountOfIter) = iterOrder
             .decodeOrder();
@@ -694,157 +743,128 @@ contract MutoPool is Ownable {
         poolData[poolId].interimOrder = iterOrder;
     }
 
-    function claimFromParticipantOrder(uint256 poolId, bytes32[] memory orders)
-        external
-        atStageFinished(poolId)
-        isScammedOrDeleted(poolId)
-        returns (uint256 sumPoolingTokenAmount, uint256 sumBiddingTokenAmount)
-    {
-        for (uint256 i = 0; i < orders.length; i++) {
-            // Note: we don't need to keep any information about the node since
-            // no new elements need to be inserted.
-            require(
-                sellOrders[poolId].remove(orders[i]),
-                "Order not claimable"
-            );
-        }
-        PoolData memory pool = poolData[poolId];
-        (, uint96 priceNumerator, uint96 priceDenominator) = pool
-            .clearingPriceOrder
-            .decodeOrder();
-        (uint64 userId, , ) = orders[0].decodeOrder();
-        bool minFundingThresholdNotReached = poolData[poolId]
-            .minFundingThresholdNotReached;
-        for (uint256 i = 0; i < orders.length; i++) {
-            (uint64 userIdOrder, uint96 buyAmount, uint96 sellAmount) = orders[
-                i
-            ].decodeOrder();
-            require(userIdOrder == userId, "Claimable by user only");
-            if (minFundingThresholdNotReached) {
-                //[10]
-                sumBiddingTokenAmount = sumBiddingTokenAmount.add(sellAmount);
-            } else {
-                //[23]
-                if (orders[i] == pool.clearingPriceOrder) {
-                    //[25]
-                    sumPoolingTokenAmount = sumPoolingTokenAmount.add(
-                        pool.volumeClearingPriceOrder.mul(priceNumerator).div(
-                            priceDenominator
-                        )
-                    );
-                    sumBiddingTokenAmount = sumBiddingTokenAmount.add(
-                        sellAmount.sub(pool.volumeClearingPriceOrder)
-                    );
-                } else {
-                    if (orders[i].smallerThan(pool.clearingPriceOrder)) {
-                        //[17]
-                        sumPoolingTokenAmount = sumPoolingTokenAmount.add(
-                            sellAmount.mul(priceNumerator).div(priceDenominator)
-                        );
-                    } else {
-                        //[24]
-                        sumBiddingTokenAmount = sumBiddingTokenAmount.add(
-                            sellAmount
-                        );
-                    }
-                }
+    function _placeSellOrders(
+        uint256 poolId,
+        uint96[] memory _minBuyAmounts,
+        uint96[] memory _sellAmounts,
+        bytes32[] memory _prevSellOrders,
+        address orderSubmitter
+    ) internal returns (uint64 userId) {
+        {
+            (
+                ,
+                uint96 buyAmountOfInitialPoolOrder,
+                uint96 sellAmountOfInitialPoolOrder
+            ) = poolData[poolId].initialPoolOrder.decodeOrder();
+            for (uint256 i = 0; i < _minBuyAmounts.length; i++) {
+                require(
+                    _minBuyAmounts[i].mul(buyAmountOfInitialPoolOrder) <
+                        sellAmountOfInitialPoolOrder.mul(_sellAmounts[i]),
+                    "limit price is <  min offer"
+                );
             }
-            emit ClaimedFromOrder(poolId, userId, buyAmount, sellAmount);
         }
-        sendOutTokens(
-            poolId,
-            sumPoolingTokenAmount,
-            sumBiddingTokenAmount,
-            userId
-        );
-    }
-
-    function setFeeParameters(
-        uint256 newFeeNumerator,
-        address newfeeReceiverAddress
-    ) external onlyOwner {
-        require(newFeeNumerator <= 15);
-        feeReceiverUserId = getUserId(newfeeReceiverAddress);
-        feeNumerator = newFeeNumerator;
-    }
-
-    function containsOrder(uint256 poolId, bytes32 order)
-        public
-        view
-        returns (bool)
-    {
-        return sellOrders[poolId].contains(order);
-    }
-
-    function getSecondsRemainingInBatch(uint256 poolId)
-        public
-        view
-        returns (uint256)
-    {
-        if (poolData[poolId].initData.poolEndDate < block.timestamp) {
-            return 0;
-        }
-        return poolData[poolId].initData.poolEndDate.sub(block.timestamp);
-    }
-
-    function registerUser(address user) public returns (uint64 userId) {
-        numUsers = numUsers.add(1).toUint64();
-        require(registeredUsers.insert(numUsers, user), "User already exists");
-        userId = numUsers;
-        emit UserRegistration(user, userId);
-    }
-
-    function getUserId(address user) public returns (uint64 userId) {
-        if (registeredUsers.hasAddress(user)) {
-            userId = registeredUsers.getId(user);
-        } else {
-            userId = registerUser(user);
-            emit NewUser(userId, user);
-        }
-    }
-
-    function getFormHash(uint256 pool_id) external view returns (string memory) {
-        require(pool_id <= poolCounter, "Invali pool ID");
-        return poolData[pool_id].initData.formHash;
-    }
-
-    function getEncodedOrder(
-        uint64 userId,
-        uint96 buyAmount,
-        uint96 sellAmount
-    ) external pure returns (bytes32) {
-        return
-            bytes32(
-                (uint256(userId) << 192) +
-                    (uint256(buyAmount) << 96) +
-                    uint256(sellAmount)
+        uint256 sumOfSellAmounts = 0;
+        userId = getUserId(orderSubmitter);
+        uint256 minimumBiddingAmountPerOrder = poolData[poolId]
+            .initData
+            .minimumBiddingAmountPerOrder;
+        for (uint256 i = 0; i < _minBuyAmounts.length; i++) {
+            require(_minBuyAmounts[i] > 0, "buyAmounts must be > 0");
+            require(
+                _sellAmounts[i] > minimumBiddingAmountPerOrder,
+                "order too small"
             );
-    }
+            if (
+                sellOrders[poolId].insert(
+                    IterableOrderedOrderSet.encodeOrder(
+                        userId,
+                        _minBuyAmounts[i],
+                        _sellAmounts[i]
+                    ),
+                    _prevSellOrders[i]
+                )
+            ) {
+                sumOfSellAmounts = sumOfSellAmounts.add(_sellAmounts[i]);
+                emit NewSellOrderPlaced(
+                    poolId,
+                    userId,
+                    _minBuyAmounts[i],
+                    _sellAmounts[i],
+                    IterableOrderedOrderSet.encodeOrder(
+                        userId,
+                        _minBuyAmounts[i],
+                        _sellAmounts[i]
+                    )
+                );
+            }
+        }
 
-    function CheckUserId(address userAddress) external view returns (uint64) {
-        require(registeredUsers.hasAddress(userAddress), "Not Registered Yet");
-        return registeredUsers.getId(userAddress);
-    }
-
-    function refundOrder(uint256 poolId, bytes32 order)
-        external
-        scammedOrDeleted(poolId)
-    {
-        require(sellOrders[poolId].remove(order), "Order not refundable");
-        uint64 userId = getUserId(msg.sender);
-        (uint64 userIdOrder, uint96 buyAmount, uint96 sellAmount) = order
-            .decodeOrder();
-        require(userIdOrder == userId, "Not Order Placer");
-        poolData[poolId].initData.biddingToken.safeTransfer(
+        // transfer the sum of sell amounts to this contract
+        poolData[poolId].initData.biddingToken.safeTransferFrom(
             msg.sender,
-            sellAmount
+            address(this),
+            sumOfSellAmounts
         );
-        emit CancellationSellOrder(
-            poolId,
-            userId,
-            buyAmount,
-            sellAmount,
-            order
-        );
+    }
+
+    function sendOutTokens(
+        uint256 poolId,
+        uint256 poolingTokenAmount,
+        uint256 biddingTokenAmount,
+        uint64 userId
+    ) internal {
+        address userAddress = registeredUsers.getAddressAt(userId);
+        if (poolingTokenAmount > 0) {
+            poolData[poolId].initData.poolingToken.safeTransfer(
+                userAddress,
+                poolingTokenAmount
+            );
+        }
+        if (biddingTokenAmount > 0) {
+            poolData[poolId].initData.biddingToken.safeTransfer(
+                userAddress,
+                biddingTokenAmount
+            );
+        }
+    }
+
+    function processFeesAndPoolerFunds(
+        uint256 poolId,
+        uint256 fillVolumeOfPoolerOrder,
+        uint64 poolerId,
+        uint96 fullPooledAmount
+    ) internal {
+        uint256 feeAmount = fullPooledAmount
+            .mul(poolData[poolId].feeNumerator)
+            .div(FEE_DENOMINATOR);
+        if (poolData[poolId].minFundingThresholdNotReached) {
+            sendOutTokens(poolId, fullPooledAmount.add(feeAmount), 0, poolerId); //[4]
+        } else {
+            (, uint96 priceNumerator, uint96 priceDenominator) = poolData[
+                poolId
+            ].clearingPriceOrder.decodeOrder();
+            uint256 unsettledPoolTokens = fullPooledAmount.sub(
+                fillVolumeOfPoolerOrder
+            );
+            uint256 poolingTokenAmount = unsettledPoolTokens.add(
+                feeAmount.mul(unsettledPoolTokens).div(fullPooledAmount)
+            );
+            uint256 biddingTokenAmount = fillVolumeOfPoolerOrder
+                .mul(priceDenominator)
+                .div(priceNumerator);
+            sendOutTokens(
+                poolId,
+                poolingTokenAmount,
+                biddingTokenAmount,
+                poolerId
+            );
+            sendOutTokens(
+                poolId,
+                feeAmount.mul(fillVolumeOfPoolerOrder).div(fullPooledAmount),
+                0,
+                feeReceiverUserId
+            );
+        }
     }
 }
