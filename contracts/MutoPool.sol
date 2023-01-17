@@ -1,14 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
-
+import "./libraries/SafeCast.sol";
 import "./libraries/IdToAddressBiMap.sol";
 import "./libraries/IterableOrderedOrderSet.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import "./libraries/SafeCast.sol";
-
 // Pool input data
 struct InitialPoolData {
     string formHash;
@@ -23,7 +21,6 @@ struct InitialPoolData {
     uint256 minFundingThreshold;
     bool isAtomicClosureAllowed;
 }
-
 // Pool data
 struct PoolData {
     InitialPoolData initData;
@@ -353,16 +350,14 @@ contract MutoPool is Ownable {
         emit PoolEdittedByUser(poolId, _formHash);
     }
 
-    // To fetch the latest bid buy vs sell ratio
+    // To fetch the latest bid buy & sell amount
     function getCurrentPoolPrice(uint256 _poolId)
         external
         view
-        returns (uint256)
+        returns (uint96 buyAmount, uint96 sellAmount)
     {
         bytes32 current = sellOrders[_poolId].getCurrent();
-        (, uint96 buyAmount, uint96 sellAmount) = current.decodeOrder();
-        // returns amount of bidding token per pooling token
-        return sellAmount.div(buyAmount);
+        (, buyAmount, sellAmount) = current.decodeOrder();
     }
 
     function markSpam(uint256 poolId) external onlyOwner {
