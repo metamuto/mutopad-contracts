@@ -33,7 +33,6 @@ module.exports = {
   },
   etherscan: {
     apiKey: APIKEY
-    
   },
   solidity: {
     compilers: [
