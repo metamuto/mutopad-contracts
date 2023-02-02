@@ -1,14 +1,18 @@
 const { ethers } = require('hardhat');
-/** This is a function used to deploy contract */
 const hre = require('hardhat');
 
 async function main() {
-  const MutoPool = await hre.ethers.getContractFactory('MutoPool');
-  const _MutoPool = await MutoPool.deploy();
-  console.log(
-    'MutoPool deployed to:',
-    _MutoPool.address,
-  );
+
+  console.log('-- MutoPool CONTRACT --');
+  const MutoPool = await ethers.getContractFactory("MutoPool");
+  const mutoPool = await upgrades.deployProxy(MutoPool);
+  await mutoPool.deployed();
+  let mutoPoolImplementation = await upgrades.erc1967.getImplementationAddress(mutoPool.address);
+  let mutoPoolProxyAdmin = await upgrades.erc1967.getAdminAddress(mutoPool.address);
+  console.log('MutoPool TOKEN CONTRACT: ',mutoPool.address);
+  console.log('IMPLEMENTATION: ',mutoPoolImplementation)
+  console.log('PROXY ADMIN: ',mutoPoolProxyAdmin)
+
 }
 
 main().

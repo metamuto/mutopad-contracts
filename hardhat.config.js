@@ -1,75 +1,97 @@
-require('@nomiclabs/hardhat-waffle');
-require('@nomiclabs/hardhat-etherscan');
+const { version } = require("chai");
+
+require("@nomiclabs/hardhat-waffle");
+require("@nomiclabs/hardhat-etherscan");
+require("hardhat-watcher");
 require('hardhat-contract-sizer');
-require("hardhat-gas-reporter");
+require("dotenv").config();
+
+const PRIVATE_KEY = process.env.PRIVATE_KEY;
+const APIKEY = process.env.APIKEY;
 
 module.exports = {
-  'gasReporter': {
-    'currency': 'CHF',
-    'gasPrice': 21
+  defaultNetwork: "bsc_testnet",
+  networks: {
+    hardhat: {},
+    bsc_testnet: {
+      url: "https://data-seed-prebsc-2-s3.binance.org:8545",
+      accounts: [PRIVATE_KEY]
+    }
   },
-  'etherscan': {
-    'apiKey': '6TKH29HCYTU6WHU2FF11QPATCY4UQ6HQ8G', 
-  },
-  'mocha': {
-    'timeout': 20000,
-  },
-  'networks': {
-    'hardhat': {},
-    'goerli': {
-      'accounts': ['a4f96c04ed56df73a0f1b36bcdac8b479f75d08459817435e3b2b95c8d49724c'],
-      'url': 'https://goerli.optimism.io',
+  watcher: {
+    compilation: {
+      tasks: ["compile"],
+      files: ["./contracts"],
+      verbose: true,
     },
+    ci: {
+      tasks: ["clean", { command: "compile", params: { quiet: true } }, {
+        command: "test",
+        params: { noCompile: true, testFiles: ["testfile.ts"] }
+      }],
+    }
   },
-  'paths': {
-    'sources': './contracts',
-    'artifacts': './artifacts',
-    'cache': './cache',
-    'tests': './test',
+  etherscan: {
+    apiKey: APIKEY // polygon
+    
   },
-  'solidity': {
-    'compilers': [
+  solidity: {
+    compilers: [
       {
-        'version': '0.8.17',
+        version: "0.8.17"
+     },
+     {
+        version: "0.8.9"
       },
       {
-        'version': '0.8.9',
+        version: "0.5.17",
       },
       {
-        'version': '0.8.7',
-      },
-      {
-        'version': '0.8.0',
-      },
+        version: "0.6.0"
+      }, 
     ],
-    'settings': {
-      'optimizer': {
-        'enabled': true,
-        'runs': 200,
+    overrides: {
+      "contracts/RecruitCoin.sol": {
+        version: "0.8.17",
+      },
+      "contracts/RecruitCoinTest.sol": {
+        version: "0.8.17",
+      },
+      "contracts/FaucetTokenDai.sol": {
+        version: "0.5.17",
+      },
+      "contracts/FaucetTokenBUSD.sol": {
+        version: "0.5.17",
+      },
+      "contracts/TUSDFaucet.sol": {
+        version: "0.5.17",
+      },
+      "contracts/ERC20MockUSDT.sol": {
+        version: "0.6.0",
+      }
+
+    },
+    settings: {
+      optimizer: {
+        enabled: true,
+        runs: 200,
+        details: { yul: false },
       },
     },
   },
-  'watcher': {
-    'ci': {
-      'tasks': [
-        'clean',
-        {
-          'command': 'compile',
-          'params': { 'quiet': true }
-        },
-        {
-          'command': 'test',
-          'params': {
-            'noCompile': true,
-            'testFiles': ['testfile.ts']
-          },
-        },
-      ],
-    },
-    'compilation': {
-      'tasks': ['compile'],
-      'files': ['./contracts'],
-      'verbose': true,
-    },
+  paths: {
+    sources: "./contracts",
+    tests: "./test",
+    cache: "./cache",
+    artifacts: "./artifacts"
   },
-};
+  mocha: {
+    timeout: 2000000
+  },
+  contractSizer: {
+    alphaSort: true,
+    disambiguatePaths: false,
+    runOnCompile: true,
+    strict: true,
+  }
+}
