@@ -3,16 +3,16 @@ pragma solidity ^0.8.0;
 import "./libraries/SafeCast.sol";
 import "./libraries/IdToAddressBiMap.sol";
 import "./libraries/IterableOrderedOrderSet.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/utils/math/SafeMath.sol";
-import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/token/ERC20/IERC20Upgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/utils/math/SafeMathUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/token/ERC20/utils/SafeERC20Upgradeable.sol";
 
 // Pool input data
 struct InitialPoolData {
   string formHash;
-  IERC20 poolingToken;
-  IERC20 biddingToken;
+  IERC20Upgradeable poolingToken;
+  IERC20Upgradeable biddingToken;
   uint40 orderCancellationEndDate;
   uint40 poolStartDate;
   uint40 poolEndDate;
@@ -37,8 +37,8 @@ struct PoolData {
   bool isDeleted;
 }
 
-contract MutoPool is Ownable {
-  using SafeERC20 for IERC20;
+contract MutoPool is OwnableUpgradeable {
+  using SafeERC20Upgradeable for IERC20Upgradeable;
   using SafeMath for uint40;
   using SafeMath for uint64;
   using SafeMath for uint96;
@@ -56,10 +56,8 @@ contract MutoPool is Ownable {
   uint64 public poolCounter;
   IdToAddressBiMap.Data private registeredUsers;
 
-  constructor() Ownable() {}
-
-  uint64 public feeReceiverUserId = 1;
-  uint256 public feeNumerator = 15;
+  uint64 public feeReceiverUserId;
+  uint256 public feeNumerator;
   uint256 public constant FEE_DENOMINATOR = 1000;
 
   // To check if pool is marked scam or deleted
@@ -110,8 +108,8 @@ contract MutoPool is Ownable {
     uint256 indexed userId,
     address indexed poolOwner,
     string formHash,
-    IERC20 poolingToken,
-    IERC20 biddingToken,
+    IERC20Upgradeable poolingToken,
+    IERC20Upgradeable biddingToken,
     uint40 orderCancellationEndDate,
     uint40 poolStartDate,
     uint40 poolEndDate,
@@ -169,6 +167,11 @@ contract MutoPool is Ownable {
   function CheckUserId(address userAddress) external view returns (uint64) {
     require(registeredUsers.hasAddress(userAddress), "Not Registered Yet"); // user must be registered
     return registeredUsers.getId(userAddress);
+  }
+
+  function initialize() public initializer {
+    feeReceiverUserId = 1;
+    feeNumerator = 15;
   }
 
   function initiatePool(InitialPoolData calldata _initData) external returns (uint256) {

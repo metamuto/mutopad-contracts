@@ -2,6 +2,7 @@ const { version } = require("chai");
 
 require("@nomiclabs/hardhat-waffle");
 require("@nomiclabs/hardhat-etherscan");
+require('@openzeppelin/hardhat-upgrades');
 require("hardhat-watcher");
 require('hardhat-contract-sizer');
 require("dotenv").config();
@@ -67,9 +68,9 @@ module.exports = {
     timeout: 2000000
   },
   contractSizer: {
-    alphaSort: true,
-    disambiguatePaths: false,
-    runOnCompile: true,
-    strict: true,
+    // alphaSort: true,
+    // disambiguatePaths: false,
+    // runOnCompile: true,
+    // strict: true,
   }
 }
