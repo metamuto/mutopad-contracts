@@ -32,7 +32,7 @@ module.exports = {
     }
   },
   etherscan: {
-    apiKey: APIKEY // polygon
+    apiKey: APIKEY
     
   },
   solidity: {
@@ -50,27 +50,6 @@ module.exports = {
         version: "0.6.0"
       }, 
     ],
-    overrides: {
-      "contracts/RecruitCoin.sol": {
-        version: "0.8.17",
-      },
-      "contracts/RecruitCoinTest.sol": {
-        version: "0.8.17",
-      },
-      "contracts/FaucetTokenDai.sol": {
-        version: "0.5.17",
-      },
-      "contracts/FaucetTokenBUSD.sol": {
-        version: "0.5.17",
-      },
-      "contracts/TUSDFaucet.sol": {
-        version: "0.5.17",
-      },
-      "contracts/ERC20MockUSDT.sol": {
-        version: "0.6.0",
-      }
-
-    },
     settings: {
       optimizer: {
         enabled: true,
