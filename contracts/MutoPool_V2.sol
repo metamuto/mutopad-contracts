@@ -58,7 +58,9 @@ contract MutoPool is Ownable {
     uint256 public poolCounter;
     IdToAddressBiMap.Data private registeredUsers;
 
-    constructor()  Ownable() {}
+    constructor()  Ownable() {
+        registerUser(msg.sender);
+    }
 
     uint64 public feeReceiverUserId = 1;
     uint256 public feeNumerator = 15;
