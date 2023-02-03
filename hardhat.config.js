@@ -14,11 +14,11 @@ module.exports = {
   defaultNetwork: "bsc_testnet",
   networks: {
     bsc_testnet: {
-      throwOnTransactionFailures: true,
-      throwOnCallFailures: true,
-      allowUnlimitedContractSize: true,
-      blockGasLimit: 0x1fffffffffffff,
-      gas: 120000000000000,
+      // throwOnTransactionFailures: true,
+      // throwOnCallFailures: true,
+      // allowUnlimitedContractSize: true,
+      // blockGasLimit: 0x1fffffffffffff,
+      // gas: 120000000000000,
       timeout: 1800000,
       url: "https://data-seed-prebsc-2-s1.binance.org:8545",
       accounts: [PRIVATE_KEY]
@@ -38,14 +38,14 @@ module.exports = {
     }
   },
   etherscan: {
-    apiKey: APIKEY
+    apiKey: "UN1PB9XKIN1QGIGI9XH1G1KRB4GSSBM5V3"
   },
   solidity: {
     version: "0.8.9",
     settings: {
       optimizer: {
         enabled: true,
-        runs: 1000,
+        runs: 200,
       },
     },
   },
@@ -59,9 +59,9 @@ module.exports = {
     timeout: 2000000
   },
   contractSizer: {
-    // alphaSort: true,
-    // disambiguatePaths: false,
-    // runOnCompile: true,
-    // strict: true,
+    alphaSort: true,
+    disambiguatePaths: false,
+    runOnCompile: true,
+    strict: true,
   }
 }
