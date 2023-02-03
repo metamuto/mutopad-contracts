@@ -388,7 +388,7 @@ contract MutoPool is OwnableUpgradeable {
     require(poolData[poolId].initData.isAtomicClosureAllowed, "Not autosettle allowed");
     require(_minBuyAmount.length == 1 && _sellAmount.length == 1,"More than one orders");
     uint64 userId = getUserId(msg.sender);
-    require(poolData[poolId].interimOrder.smallerThan(IterableOrderedOrderSet.encodeOrder(userId, _minBuyAmount[0], _sellAmount[0])));
+    require(poolData[poolId].interimOrder.smallerThan(IterableOrderedOrderSet.encodeOrder(userId, _minBuyAmount[0], _sellAmount[0])), "order lessthan interim order");
     _placeSellOrders(poolId, _minBuyAmount, _sellAmount, _prevSellOrder, msg.sender);
     settlePool(poolId);
   }
@@ -504,7 +504,7 @@ contract MutoPool is OwnableUpgradeable {
     uint256 minimumBiddingAmountPerOrder = poolData[poolId].initData.minimumBiddingAmountPerOrder;
     for (uint256 i = 0; i < _minBuyAmounts.length; i++) {
       require(_minBuyAmounts[i] > 0, "buyAmounts must be > 0");
-      require(_sellAmounts[i] > minimumBiddingAmountPerOrder, "order too small");
+      require(_sellAmounts[i] >= minimumBiddingAmountPerOrder, "order too small");
       if (sellOrders[poolId].insert(IterableOrderedOrderSet.encodeOrder(userId, _minBuyAmounts[i], _sellAmounts[i]), _prevSellOrders[i])) {
         sumOfSellAmounts = sumOfSellAmounts.add(_sellAmounts[i]);
         emit NewSellOrderPlaced(
