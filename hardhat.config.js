@@ -13,9 +13,14 @@ const APIKEY = process.env.APIKEY;
 module.exports = {
   defaultNetwork: "bsc_testnet",
   networks: {
-    hardhat: {},
     bsc_testnet: {
-      url: "https://data-seed-prebsc-2-s3.binance.org:8545",
+      throwOnTransactionFailures: true,
+      throwOnCallFailures: true,
+      allowUnlimitedContractSize: true,
+      blockGasLimit: 0x1fffffffffffff,
+      gas: 120000000000000,
+      timeout: 1800000,
+      url: "https://data-seed-prebsc-2-s1.binance.org:8545",
       accounts: [PRIVATE_KEY]
     }
   },
@@ -36,25 +41,11 @@ module.exports = {
     apiKey: APIKEY
   },
   solidity: {
-    compilers: [
-      {
-        version: "0.8.17"
-     },
-     {
-        version: "0.8.9"
-      },
-      {
-        version: "0.5.17",
-      },
-      {
-        version: "0.6.0"
-      }, 
-    ],
+    version: "0.8.9",
     settings: {
       optimizer: {
         enabled: true,
-        runs: 200,
-        details: { yul: false },
+        runs: 1000,
       },
     },
   },

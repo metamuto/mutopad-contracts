@@ -7,7 +7,7 @@ async function main() {
   const MutoPool = await ethers.getContractFactory("MutoPool");
   const mutoPool = await upgrades.deployProxy(MutoPool);
   await mutoPool.deployed();
-  await mutoPool.deployTransaction.wait(2);
+  await mutoPool.deployTransaction.wait(15);
   let mutoPoolImplementation = await upgrades.erc1967.getImplementationAddress(mutoPool.address);
   let mutoPoolProxyAdmin = await upgrades.erc1967.getAdminAddress(mutoPool.address);
   

@@ -5,6 +5,7 @@
     "@nomiclabs/hardhat-ethers": "^2.2.1",
     "@nomiclabs/hardhat-etherscan": "^3.1.1",
     "@nomiclabs/hardhat-waffle": "^2.0.3",
+    "@openzeppelin/hardhat-upgrades": "^1.22.1",
     "chai": "^4.3.6",
     "ethereum-waffle": "^3.4.4",
     "ethers": "^5.7.2",
@@ -13,7 +14,6 @@
   "dependencies": {
     "@openzeppelin/contracts": "^4.7.3",
     "@openzeppelin/contracts-upgradeable": "^4.8.1",
-    "@openzeppelin/hardhat-upgrades": "^1.22.1",
     "dotenv": "^10.0.0",
     "hardhat-contract-sizer": "^2.6.1",
     "hardhat-watcher": "^2.5.0",
