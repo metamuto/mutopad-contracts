@@ -59,7 +59,6 @@ contract MutoPool is OwnableUpgradeable {
   uint64 public feeReceiverUserId;
   uint256 public feeNumerator;
   uint256 public constant FEE_DENOMINATOR = 1000;
-
   // To check if pool is marked scam or deleted
   modifier scammedOrDeleted(uint64 poolId) {
     require(poolData[poolId].isScam || poolData[poolId].isDeleted, "Pool not Scammed or Deleted"); // pool should be scammed or deleted
@@ -68,7 +67,7 @@ contract MutoPool is OwnableUpgradeable {
 
   // To check if cancelation date is reached or not
   modifier atStageOrderPlacementAndCancelation(uint64 poolId) {
-    require(block.timestamp < poolData[poolId].initData.orderCancellationEndDate, "Not in order placement/cancelation phase"); // cancellation date shouldn't have passed
+    require(block.timestamp < poolData[poolId].initData.orderCancellationEndDate, "Not in order place/cancel phase"); // cancellation date shouldn't have passed
     _;
   }
 
@@ -159,12 +158,12 @@ contract MutoPool is OwnableUpgradeable {
   event UserRegistration(address indexed user, uint64 userId);
 
   function setFeeParameters(uint256 newFeeNumerator, address newfeeReceiverAddress) external onlyOwner {
-    require(newFeeNumerator <= 15); // pool fee can be maximum upto 1.5 %
+    require(newFeeNumerator <= 15, "Fee can't be > 1.5 %"); // pool fee can be maximum upto 1.5 %
     feeReceiverUserId = getUserId(newfeeReceiverAddress);
     feeNumerator = newFeeNumerator;
   }
 
-  function CheckUserId(address userAddress) external view returns (uint64) {
+  function checkUserId(address userAddress) external view returns (uint64) {
     require(registeredUsers.hasAddress(userAddress), "Not Registered Yet"); // user must be registered
     return registeredUsers.getId(userAddress);
   }
@@ -241,10 +240,10 @@ contract MutoPool is OwnableUpgradeable {
     return poolCounter;
   }
 
-  function getFormHash(uint64 pool_id) external view returns (string memory) {
+  function getFormHash(uint64 poolId) external view returns (string memory) {
     // pool must exist
-    require(pool_id <= poolCounter, "Invali pool ID");
-    return poolData[pool_id].initData.formHash;
+    require(poolId <= poolCounter, "Invali pool ID");
+    return poolData[poolId].initData.formHash;
   }
 
   function updatePoolAdmin(
@@ -264,7 +263,7 @@ contract MutoPool is OwnableUpgradeable {
   }
 
   function updatePoolUser(uint64 poolId, string memory _formHash) external {
-    require(msg.sender == poolData[poolId].poolOwner, "Can be updated by pool owner only");
+    require(msg.sender == poolData[poolId].poolOwner, "pool owner only can update");
     poolData[poolId].initData.formHash = _formHash;
     emit PoolEdittedByUser(poolId, _formHash);
   }
@@ -387,7 +386,7 @@ contract MutoPool is OwnableUpgradeable {
     bytes32[] memory _prevSellOrder
   ) external atStageSolutionSubmission(poolId) {
     require(poolData[poolId].initData.isAtomicClosureAllowed, "Not autosettle allowed");
-    require(_minBuyAmount.length == 1 && _sellAmount.length == 1);
+    require(_minBuyAmount.length == 1 && _sellAmount.length == 1,"More than one orders");
     uint64 userId = getUserId(msg.sender);
     require(poolData[poolId].interimOrder.smallerThan(IterableOrderedOrderSet.encodeOrder(userId, _minBuyAmount[0], _sellAmount[0])));
     _placeSellOrders(poolId, _minBuyAmount, _sellAmount, _prevSellOrder, msg.sender);
