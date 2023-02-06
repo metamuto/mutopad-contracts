@@ -5,7 +5,8 @@ async function main() {
 
   console.log('-- MutoPool CONTRACT Upgraded --');
   const MutoPool = await ethers.getContractFactory("MutoPool");
-  const mutoPool = await upgrades.upgradeProxy("0x50F48d98663084BfB6d18b9DE93B358181061F28",MutoPool);
+  // To Upgrade The Smart Contract You Have To Provide The Proxy Address In (proxyUpgrade) function
+  const mutoPool = await upgrades.upgradeProxy("<Provide The Proxy Address Here>",MutoPool);
   let mutoPoolImplementation = await upgrades.erc1967.getImplementationAddress(mutoPool.address);
   let mutoPoolProxyAdmin = await upgrades.erc1967.getAdminAddress(mutoPool.address);
 
