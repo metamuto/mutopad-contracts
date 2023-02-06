@@ -123,7 +123,7 @@ contract MutoPool is OwnableUpgradeable {
     bytes32 interimOrder,
     bytes32 clearingPriceOrder,
     uint96 volumeClearingOrder,
-    bool minimumFundingThresholdReached,
+    bool minFundingThresholdNotReached,
     uint256 minimumBiddingAmountPerOrder,
     uint256 minFundingThreshold,
     bool isAtomicClosureAllowed,
@@ -349,35 +349,66 @@ contract MutoPool is OwnableUpgradeable {
     atStageFinished(poolId)
     isScammedOrDeleted(poolId)
     returns (uint256 sumPoolingTokenAmount, uint256 sumBiddingTokenAmount)
-  {
-    for (uint256 i = 0; i < orders.length; i++) {
-      require(sellOrders[poolId].remove(orders[i]), "Order not claimable");
-    }
-    PoolData memory pool = poolData[poolId];
-    (, uint96 priceNumerator, uint96 priceDenominator) = pool.clearingPriceOrder.decodeOrder();
-    (uint64 userId, , ) = orders[0].decodeOrder();
-    bool minFundingThresholdNotReached = poolData[poolId].minFundingThresholdNotReached;
-    for (uint256 i = 0; i < orders.length; i++) {
-      (uint64 userIdOrder, uint96 buyAmount, uint96 sellAmount) = orders[i].decodeOrder();
-      require(userIdOrder == userId, "Claimable by user only");
-      if (minFundingThresholdNotReached) {
-        sumBiddingTokenAmount = sumBiddingTokenAmount.add(sellAmount);
-      } else {
-        if (orders[i] == pool.clearingPriceOrder) {
-          sumPoolingTokenAmount = sumPoolingTokenAmount.add(pool.volumeClearingPriceOrder.mul(priceNumerator).div(priceDenominator));
-          sumBiddingTokenAmount = sumBiddingTokenAmount.add(sellAmount.sub(pool.volumeClearingPriceOrder));
-        } else {
-          if (orders[i].smallerThan(pool.clearingPriceOrder)) {
-            sumPoolingTokenAmount = sumPoolingTokenAmount.add(sellAmount.mul(priceNumerator).div(priceDenominator));
-          } else {
-            sumBiddingTokenAmount = sumBiddingTokenAmount.add(sellAmount);
-          }
+      {
+        for (uint256 i = 0; i < orders.length; i++) {
+            // Note: we don't need to keep any information about the node since
+            // no new elements need to be inserted.
+            require(
+                sellOrders[poolId].remove(orders[i]),
+                "order is no longer claimable"
+            );
         }
-      }
-      emit OrderClaimedByUser(poolId, userId, buyAmount, sellAmount);
+        PoolData memory auction = poolData[poolId];
+        (, uint96 priceNumerator, uint96 priceDenominator) =
+            auction.clearingPriceOrder.decodeOrder();
+        (uint64 userId, , ) = orders[0].decodeOrder();
+        bool minFundingThresholdNotReached =
+            poolData[poolId].minFundingThresholdNotReached;
+        for (uint256 i = 0; i < orders.length; i++) {
+            (uint64 userIdOrder, uint96 buyAmount, uint96 sellAmount) =
+                orders[i].decodeOrder();
+            require(
+                userIdOrder == userId,"only same user allowed to claim"
+            );
+            if (minFundingThresholdNotReached) {
+                //[10]
+                sumBiddingTokenAmount = sumBiddingTokenAmount.add(sellAmount);
+            } else {
+                //[23]
+                if (orders[i] == auction.clearingPriceOrder) {
+                    //[25]
+                    sumPoolingTokenAmount = sumPoolingTokenAmount.add(
+                        auction
+                            .volumeClearingPriceOrder
+                            .mul(priceNumerator)
+                            .div(priceDenominator)
+                    );
+                    sumBiddingTokenAmount = sumBiddingTokenAmount.add(
+                        sellAmount.sub(auction.volumeClearingPriceOrder)
+                    );
+                } else {
+                    if (orders[i].smallerThan(auction.clearingPriceOrder)) {
+                        //[17]
+                        sumPoolingTokenAmount = sumPoolingTokenAmount.add(
+                            sellAmount.mul(priceNumerator).div(priceDenominator)
+                        );
+                    } else {
+                        //[24]
+                        sumBiddingTokenAmount = sumBiddingTokenAmount.add(
+                            sellAmount
+                        );
+                    }
+                }
+            }
+            emit OrderClaimedByUser(poolId, userId, buyAmount, sellAmount);
+        }
+        sendOutTokens(
+            poolId,
+            sumPoolingTokenAmount,
+            sumBiddingTokenAmount,
+            userId
+        ); //[3]
     }
-    sendOutTokens(poolId, sumPoolingTokenAmount, sumBiddingTokenAmount, userId);
-  }
 
   function settlePoolAtomically(
     uint64 poolId,
@@ -422,54 +453,114 @@ contract MutoPool is OwnableUpgradeable {
   }
 
   function settlePool(uint64 poolId) public atStageSolutionSubmission(poolId) returns (bytes32 clearingOrder) {
-    (uint64 poolerId, uint96 minPooledBuyAmount, uint96 fullPooledAmount) = poolData[poolId].initialPoolOrder.decodeOrder();
-    uint256 currentBidSum = poolData[poolId].interimSumBidAmount;
-    bytes32 currentOrder = poolData[poolId].interimOrder;
-    uint256 buyAmountOfIter;
-    uint256 sellAmountOfIter;
-    uint96 fillVolumeOfPoolerOrder = fullPooledAmount;
-    do {
-      bytes32 nextOrder = sellOrders[poolId].next(currentOrder);
-      if (nextOrder == IterableOrderedOrderSet.QUEUE_END) {
-        break;
-      }
-      currentOrder = nextOrder;
-      (, buyAmountOfIter, sellAmountOfIter) = currentOrder.decodeOrder();
-      currentBidSum = currentBidSum.add(sellAmountOfIter);
-    } while (currentBidSum.mul(buyAmountOfIter) < fullPooledAmount.mul(sellAmountOfIter));
+      (
+          uint64 poolerId,
+          uint96 minPooledBuyAmount,
+          uint96 fullPooledAmount
+      ) = poolData[poolId].initialPoolOrder.decodeOrder();
 
-    if (currentBidSum > 0 && currentBidSum.mul(buyAmountOfIter) >= fullPooledAmount.mul(sellAmountOfIter)) {
-      uint256 uncoveredBids = currentBidSum.sub(fullPooledAmount.mul(sellAmountOfIter).div(buyAmountOfIter));
+      uint256 currentBidSum = poolData[poolId].interimSumBidAmount;
+      bytes32 currentOrder = poolData[poolId].interimOrder;
+      uint256 buyAmountOfIter;
+      uint256 sellAmountOfIter;
+      uint96 fillVolumeOfAuctioneerOrder = fullPooledAmount;
+      // Sum order up, until fullAuctionedAmount is fully bought or queue end is reached
+      do {
+          bytes32 nextOrder = sellOrders[poolId].next(currentOrder);
+          if (nextOrder == IterableOrderedOrderSet.QUEUE_END) {
+              break;
+          }
+          currentOrder = nextOrder;
+          (, buyAmountOfIter, sellAmountOfIter) = currentOrder.decodeOrder();
+          currentBidSum = currentBidSum.add(sellAmountOfIter);
+      } while (
+          currentBidSum.mul(buyAmountOfIter) <
+              fullPooledAmount.mul(sellAmountOfIter)
+      );
 
-      if (sellAmountOfIter >= uncoveredBids) {
-        uint256 sellAmountClearingOrder = sellAmountOfIter.sub(uncoveredBids);
-        poolData[poolId].volumeClearingPriceOrder = sellAmountClearingOrder.toUint96();
-        currentBidSum = currentBidSum.sub(uncoveredBids);
-        clearingOrder = currentOrder;
+      if (
+          currentBidSum > 0 &&
+          currentBidSum.mul(buyAmountOfIter) >=
+          fullPooledAmount.mul(sellAmountOfIter)
+      ) {
+          // All considered/summed orders are sufficient to close the auction fully
+          // at price between current and previous orders.
+          uint256 uncoveredBids =
+              currentBidSum.sub(
+                  fullPooledAmount.mul(sellAmountOfIter).div(
+                      buyAmountOfIter
+                  )
+              );
+
+          if (sellAmountOfIter >= uncoveredBids) {
+              //[13]
+              // Auction fully filled via partial match of currentOrder
+              uint256 sellAmountClearingOrder =
+                  sellAmountOfIter.sub(uncoveredBids);
+              poolData[poolId]
+                  .volumeClearingPriceOrder = sellAmountClearingOrder
+                  .toUint96();
+              currentBidSum = currentBidSum.sub(uncoveredBids);
+              clearingOrder = currentOrder;
+          } else {
+              //[14]
+              // Auction fully filled via price strictly between currentOrder and the order
+              // immediately before. For a proof, see the security-considerations.md
+              currentBidSum = currentBidSum.sub(sellAmountOfIter);
+              clearingOrder = IterableOrderedOrderSet.encodeOrder(
+                  0,
+                  fullPooledAmount,
+                  currentBidSum.toUint96()
+              );
+          }
       } else {
-        currentBidSum = currentBidSum.sub(sellAmountOfIter);
-        clearingOrder = IterableOrderedOrderSet.encodeOrder(0, fullPooledAmount, uint96(currentBidSum));
-      }
-    } else {
-      if (currentBidSum > minPooledBuyAmount) {
-        clearingOrder = IterableOrderedOrderSet.encodeOrder(0, fullPooledAmount, currentBidSum.toUint96());
-      } else {
-        clearingOrder = IterableOrderedOrderSet.encodeOrder(0, fullPooledAmount, minPooledBuyAmount);
-        fillVolumeOfPoolerOrder = currentBidSum.mul(fullPooledAmount).div(minPooledBuyAmount).toUint96();
-      }
-    }
-    poolData[poolId].clearingPriceOrder = clearingOrder;
+          // All considered/summed orders are not sufficient to close the auction fully at price of last order //[18]
+          // Either a higher price must be used or auction is only partially filled
 
-    if (poolData[poolId].initData.minFundingThreshold > currentBidSum) {
-      poolData[poolId].minFundingThresholdNotReached = true;
-    }
-    processFeesAndPoolerFunds(poolId, fillVolumeOfPoolerOrder, poolerId, fullPooledAmount);
-    emit PoolCleared(poolId, fillVolumeOfPoolerOrder, uint96(currentBidSum), clearingOrder);
+          if (currentBidSum > minPooledBuyAmount) {
+              //[15]
+              // Price higher than last order would fill the auction
+              clearingOrder = IterableOrderedOrderSet.encodeOrder(
+                  0,
+                  fullPooledAmount,
+                  currentBidSum.toUint96()
+              );
+          } else {
+              //[16]
+              // Even at the initial auction price, the auction is partially filled
+              clearingOrder = IterableOrderedOrderSet.encodeOrder(
+                  0,
+                  fullPooledAmount,
+                  minPooledBuyAmount
+              );
+              fillVolumeOfAuctioneerOrder = currentBidSum
+                  .mul(fullPooledAmount)
+                  .div(minPooledBuyAmount)
+                  .toUint96();
+          }
+      }
+      poolData[poolId].clearingPriceOrder = clearingOrder;
 
-    poolData[poolId].initialPoolOrder = bytes32(0);
-    poolData[poolId].interimOrder = bytes32(0);
-    poolData[poolId].interimSumBidAmount = uint256(0);
-    poolData[poolId].initData.minimumBiddingAmountPerOrder = uint256(0);
+      if (poolData[poolId].initData.minFundingThreshold > currentBidSum) {
+          poolData[poolId].minFundingThresholdNotReached = true;
+      }
+      processFeesAndPoolerFunds(
+          poolId,
+          fillVolumeOfAuctioneerOrder,
+          poolerId,
+          fullPooledAmount
+      );
+      emit PoolCleared(
+          poolId,
+          fillVolumeOfAuctioneerOrder,
+          uint96(currentBidSum),
+          clearingOrder
+      );
+      // Gas refunds
+      poolData[poolId].initialPoolOrder = bytes32(0);
+      poolData[poolId].interimOrder = bytes32(0);
+      poolData[poolId].interimSumBidAmount = uint256(0);
+      poolData[poolId].initData.minimumBiddingAmountPerOrder = uint256(0);
   }
 
   function precalculateSellAmountSum(uint64 poolId, uint256 iterationSteps) public atStageSolutionSubmission(poolId) {
@@ -537,21 +628,52 @@ contract MutoPool is OwnableUpgradeable {
   }
 
   function processFeesAndPoolerFunds(
-    uint64 poolId,
-    uint256 fillVolumeOfPoolerOrder,
-    uint64 poolerId,
-    uint96 fullPooledAmount
-  ) internal {
-    uint256 feeAmount = fullPooledAmount.mul(poolData[poolId].feeNumerator).div(FEE_DENOMINATOR);
-    if (poolData[poolId].minFundingThresholdNotReached) {
-      sendOutTokens(poolId, fullPooledAmount.add(feeAmount), 0, poolerId); //[4]
-    } else {
-      (, uint96 priceNumerator, uint96 priceDenominator) = poolData[poolId].clearingPriceOrder.decodeOrder();
-      uint256 unsettledPoolTokens = fullPooledAmount.sub(fillVolumeOfPoolerOrder);
-      uint256 poolingTokenAmount = unsettledPoolTokens.add(feeAmount.mul(unsettledPoolTokens).div(fullPooledAmount));
-      uint256 biddingTokenAmount = fillVolumeOfPoolerOrder.mul(priceDenominator).div(priceNumerator);
-      sendOutTokens(poolId, poolingTokenAmount, biddingTokenAmount, poolerId);
-      sendOutTokens(poolId, feeAmount.mul(fillVolumeOfPoolerOrder).div(fullPooledAmount), 0, feeReceiverUserId);
+        uint64 poolId,
+        uint256 fillVolumeOfPoolerOrder,
+        uint64 poolerId,
+        uint96 fullPooledAmount
+    ) internal {
+        uint256 feeAmount =
+            fullPooledAmount.mul(poolData[poolId].feeNumerator).div(
+                FEE_DENOMINATOR
+            ); //[20]
+        if (poolData[poolId].minFundingThresholdNotReached) {
+            sendOutTokens(
+                poolId,
+                fullPooledAmount.add(feeAmount),
+                0,
+                poolerId
+            ); //[4]
+        } else {
+            //[11]
+            (, uint96 priceNumerator, uint96 priceDenominator) =
+                poolData[poolId].clearingPriceOrder.decodeOrder();
+            uint256 unsettledPoolingTokens =
+                fullPooledAmount.sub(fillVolumeOfPoolerOrder);
+            uint256 poolingTokenAmount =
+                unsettledPoolingTokens.add(
+                    feeAmount.mul(unsettledPoolingTokens).div(
+                        fullPooledAmount
+                    )
+                );
+            uint256 biddingTokenAmount =
+                fillVolumeOfPoolerOrder.mul(priceDenominator).div(
+                    priceNumerator
+                );
+            sendOutTokens(
+                poolId,
+                poolingTokenAmount,
+                biddingTokenAmount,
+                poolerId
+            ); //[5]
+            sendOutTokens(
+                poolId,
+                feeAmount.mul(fillVolumeOfPoolerOrder).div(
+                    fullPooledAmount
+                ),
+                0,
+                feeReceiverUserId
+            ); //[7]
+        }
     }
-  }
 }
