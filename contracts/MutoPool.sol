@@ -3,11 +3,16 @@ pragma solidity ^0.8.9;
 import "./libraries/SafeCast.sol";
 import "./libraries/IdToAddressBiMap.sol";
 import "./libraries/IterableOrderedOrderSet.sol";
+import "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC20/IERC20Upgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/math/SafeMathUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC20/utils/SafeERC20Upgradeable.sol";
 
+struct Decimals {
+uint8 tokenADecimal;
+uint8 tokenBDecimal;
+}
 // Pool input data
 struct InitialPoolData {
   string formHash;
@@ -21,20 +26,27 @@ struct InitialPoolData {
   uint256 minimumBiddingAmountPerOrder;
   uint256 minFundingThreshold;
   bool isAtomicClosureAllowed;
+  Decimals tokenDecimals;
+}
+
+struct StatusData{
+  bool isScam;
+  bool isDeleted;
+  bool isCancelled;
+  bool minFundingThresholdNotReached;
 }
 // Pool data
 struct PoolData {
   InitialPoolData initData;
+  StatusData statusData;
   address poolOwner;
   bytes32 initialPoolOrder;
   uint256 interimSumBidAmount;
   bytes32 interimOrder;
   bytes32 clearingPriceOrder;
   uint96 volumeClearingPriceOrder;
-  bool minFundingThresholdNotReached;
   uint256 feeNumerator;
-  bool isScam;
-  bool isDeleted;
+  bytes32 merkleRoot;
 }
 
 contract MutoPool is OwnableUpgradeable {
@@ -61,7 +73,7 @@ contract MutoPool is OwnableUpgradeable {
   uint256 public constant FEE_DENOMINATOR = 1000;
   // To check if pool is marked scam or deleted
   modifier scammedOrDeleted(uint64 poolId) {
-    require(poolData[poolId].isScam || poolData[poolId].isDeleted, "Pool not Scammed or Deleted"); // pool should be scammed or deleted
+    require(poolData[poolId].statusData.isScam || poolData[poolId].statusData.isDeleted, "Pool not Scammed or Deleted"); // pool should be scammed or deleted
     _;
   }
 
@@ -85,7 +97,7 @@ contract MutoPool is OwnableUpgradeable {
 
   // To check pool is not marked scam and deleted
   modifier isScammedOrDeleted(uint64 poolId) {
-    require(!poolData[poolId].isScam && !poolData[poolId].isDeleted, "Deleted or Scammed"); // poll must not be marked as deleted or scammed
+    require(!poolData[poolId].statusData.isScam && !poolData[poolId].statusData.isDeleted && !poolData[poolId].statusData.isCancelled, "Deleted/Scammed/Cancelled"); // poll must not be marked as deleted or scammed
     _;
   }
 
@@ -97,7 +109,7 @@ contract MutoPool is OwnableUpgradeable {
         poolData[poolId].clearingPriceOrder == bytes32(0),
       "Not in submission phase"
     ); // pool end date must have reached
-    require(!poolData[poolId].isScam && !poolData[poolId].isDeleted, "Deleted or Scammed"); //pool must not be deleted or scamed
+    require(!poolData[poolId].statusData.isScam && !poolData[poolId].statusData.isDeleted, "Deleted or Scammed"); //pool must not be deleted or scamed
     _;
   }
 
@@ -123,13 +135,10 @@ contract MutoPool is OwnableUpgradeable {
     bytes32 interimOrder,
     bytes32 clearingPriceOrder,
     uint96 volumeClearingOrder,
-    bool minFundingThresholdNotReached,
     uint256 minimumBiddingAmountPerOrder,
     uint256 minFundingThreshold,
     bool isAtomicClosureAllowed,
-    uint256 feeNumerator,
-    bool isScam,
-    bool isDeleted
+    uint256 feeNumerator
   );
 
   event OrderClaimedByUser(uint64 indexed poolId, uint64 indexed userId, uint96 buyAmount, uint96 sellAmount);
@@ -169,12 +178,14 @@ contract MutoPool is OwnableUpgradeable {
   }
 
   function initialize() public initializer {
+    __Ownable_init();
     feeReceiverUserId = 1;
     feeNumerator = 15;
   }
 
   function initiatePool(InitialPoolData calldata _initData) external returns (uint256) {
     uint256 _ammount = _initData.pooledSellAmount.mul(FEE_DENOMINATOR.add(feeNumerator)).div(FEE_DENOMINATOR);
+    _ammount = (_ammount*_initData.tokenDecimals.tokenADecimal)/1e18;
     require(_initData.poolingToken.balanceOf(msg.sender) >= _ammount, "Not enough balance");
     // dates must be configured carefully
     // start date < cancellation date < end date
@@ -196,18 +207,18 @@ contract MutoPool is OwnableUpgradeable {
     poolCounter = poolCounter + 1;
     sellOrders[poolCounter].initializeEmptyList();
     uint64 userId = getUserId(msg.sender);
+
     poolData[poolCounter] = PoolData(
       _initData,
+      StatusData(false, false, false, false),
       msg.sender,
       IterableOrderedOrderSet.encodeOrder(userId, _initData.minBuyAmount, _initData.pooledSellAmount),
       0,
       IterableOrderedOrderSet.QUEUE_START,
       bytes32(0),
       0,
-      false,
       feeNumerator,
-      false,
-      false
+      0x0
     );
     emit NewPoolE1(
       poolCounter,
@@ -229,13 +240,10 @@ contract MutoPool is OwnableUpgradeable {
       IterableOrderedOrderSet.QUEUE_START,
       bytes32(0),
       0,
-      false,
       _initData.minimumBiddingAmountPerOrder,
       _initData.minFundingThreshold,
       _initData.isAtomicClosureAllowed,
-      feeNumerator,
-      false,
-      false
+      feeNumerator
     );
     return poolCounter;
   }
@@ -275,15 +283,22 @@ contract MutoPool is OwnableUpgradeable {
   }
 
   function markSpam(uint64 poolId) external onlyOwner {
-    poolData[poolId].isScam = true;
+    poolData[poolId].statusData.isScam = true;
     // returns the funds to pooler
-    poolData[poolId].initData.poolingToken.safeTransfer(poolData[poolId].poolOwner, poolData[poolId].initData.pooledSellAmount);
+    poolData[poolId].initData.poolingToken.safeTransfer(poolData[poolId].poolOwner, (poolData[poolId].initData.pooledSellAmount*poolData[poolId].initData.tokenDecimals.tokenADecimal)/1e18);
+  }
+
+  function markCancel(uint64 poolId) external {
+    require(msg.sender == poolData[poolId].poolOwner, "Only Owner can cancel");
+    poolData[poolId].statusData.isCancelled = true;
+    // returns the funds to pooler
+    poolData[poolId].initData.poolingToken.safeTransfer(poolData[poolId].poolOwner, (poolData[poolId].initData.pooledSellAmount*poolData[poolId].initData.tokenDecimals.tokenADecimal)/1e18);
   }
 
   function deletPool(uint64 poolId) external onlyOwner {
-    poolData[poolId].isDeleted = true;
+    poolData[poolId].statusData.isDeleted = true;
     //returns the funds to pooler
-    poolData[poolId].initData.poolingToken.safeTransfer(poolData[poolId].poolOwner, poolData[poolId].initData.pooledSellAmount);
+    poolData[poolId].initData.poolingToken.safeTransfer(poolData[poolId].poolOwner, (poolData[poolId].initData.pooledSellAmount*poolData[poolId].initData.tokenDecimals.tokenADecimal)/1e18);
   }
 
   function getEncodedOrder(
@@ -296,10 +311,13 @@ contract MutoPool is OwnableUpgradeable {
 
   function placeSellOrders(
     uint64 poolId,
+    bytes32[] calldata _merkleProof,
     uint96[] memory _minBuyAmounts,
     uint96[] memory _sellAmounts,
     bytes32[] memory _prevSellOrders
   ) external atStageOrderPlacement(poolId) isScammedOrDeleted(poolId) returns (uint64 userId) {
+    bytes32 leaf = keccak256(abi.encodePacked(msg.sender));
+    require(MerkleProof.verify(_merkleProof, poolData[poolId].merkleRoot, leaf), "User not whitelisted");
     return _placeSellOrders(poolId, _minBuyAmounts, _sellAmounts, _prevSellOrders, msg.sender);
   }
 
@@ -330,7 +348,7 @@ contract MutoPool is OwnableUpgradeable {
         emit SellOrderCancelled(poolId, userId, buyAmountOfIter, sellAmountOfIter, _sellOrders[i]);
       }
     }
-    poolData[poolId].initData.biddingToken.safeTransfer(msg.sender, claimableAmount);
+    poolData[poolId].initData.biddingToken.safeTransfer(msg.sender, (claimableAmount*poolData[poolId].initData.tokenDecimals.tokenBDecimal)/1e18);
   }
 
   function refundOrder(uint64 poolId, bytes32 order) external scammedOrDeleted(poolId) {
@@ -340,7 +358,7 @@ contract MutoPool is OwnableUpgradeable {
     (uint64 userIdOrder, uint96 buyAmount, uint96 sellAmount) = order.decodeOrder();
     // check if user is order placer
     require(userIdOrder == userId, "Not Order Placer");
-    poolData[poolId].initData.biddingToken.safeTransfer(msg.sender, sellAmount);
+    poolData[poolId].initData.biddingToken.safeTransfer(msg.sender, (sellAmount*poolData[poolId].initData.tokenDecimals.tokenBDecimal)/1e18);
     emit OrderRefunded(poolId, userId, buyAmount, sellAmount, order);
   }
 
@@ -363,7 +381,7 @@ contract MutoPool is OwnableUpgradeable {
             auction.clearingPriceOrder.decodeOrder();
         (uint64 userId, , ) = orders[0].decodeOrder();
         bool minFundingThresholdNotReached =
-            poolData[poolId].minFundingThresholdNotReached;
+            poolData[poolId].statusData.minFundingThresholdNotReached;
         for (uint256 i = 0; i < orders.length; i++) {
             (uint64 userIdOrder, uint96 buyAmount, uint96 sellAmount) =
                 orders[i].decodeOrder();
@@ -542,7 +560,7 @@ contract MutoPool is OwnableUpgradeable {
       poolData[poolId].clearingPriceOrder = clearingOrder;
 
       if (poolData[poolId].initData.minFundingThreshold > currentBidSum) {
-          poolData[poolId].minFundingThresholdNotReached = true;
+          poolData[poolId].statusData.minFundingThresholdNotReached = true;
       }
       processFeesAndPoolerFunds(
           poolId,
@@ -609,7 +627,7 @@ contract MutoPool is OwnableUpgradeable {
     }
 
     // transfer the sum of sell amounts to this contract
-    poolData[poolId].initData.biddingToken.safeTransferFrom(msg.sender, address(this), sumOfSellAmounts);
+    poolData[poolId].initData.biddingToken.safeTransferFrom(msg.sender, address(this), (sumOfSellAmounts*poolData[poolId].initData.tokenDecimals.tokenBDecimal)/1e18);
   }
 
   function sendOutTokens(
@@ -620,10 +638,10 @@ contract MutoPool is OwnableUpgradeable {
   ) internal {
     address userAddress = registeredUsers.getAddressAt(userId);
     if (poolingTokenAmount > 0) {
-      poolData[poolId].initData.poolingToken.safeTransfer(userAddress, poolingTokenAmount);
+      poolData[poolId].initData.poolingToken.safeTransfer(userAddress, (poolingTokenAmount*poolData[poolId].initData.tokenDecimals.tokenADecimal)/1e18);
     }
     if (biddingTokenAmount > 0) {
-      poolData[poolId].initData.biddingToken.safeTransfer(userAddress, biddingTokenAmount);
+      poolData[poolId].initData.biddingToken.safeTransfer(userAddress, (biddingTokenAmount*poolData[poolId].initData.tokenDecimals.tokenBDecimal)/1e18);
     }
   }
 
@@ -637,7 +655,7 @@ contract MutoPool is OwnableUpgradeable {
             fullPooledAmount.mul(poolData[poolId].feeNumerator).div(
                 FEE_DENOMINATOR
             ); //[20]
-        if (poolData[poolId].minFundingThresholdNotReached) {
+        if (poolData[poolId].statusData.minFundingThresholdNotReached) {
             sendOutTokens(
                 poolId,
                 fullPooledAmount.add(feeAmount),

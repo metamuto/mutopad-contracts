@@ -7,22 +7,25 @@ require("hardhat-watcher");
 require('hardhat-contract-sizer');
 require("dotenv").config();
 
-const PRIVATE_KEY = process.env.PRIVATE_KEY;
-const APIKEY = process.env.APIKEY;
+const PRIVATE_KEY = process.env.PRIVATE_KEY_381;
+const APIKEY = process.env.API_KEY_BSC;
 
 module.exports = {
   defaultNetwork: "bsc_testnet",
+  etherscan: {
+    apiKey: APIKEY
+  },
   networks: {
     bsc_testnet: {
-      // throwOnTransactionFailures: true,
-      // throwOnCallFailures: true,
-      // allowUnlimitedContractSize: true,
-      // blockGasLimit: 0x1fffffffffffff,
-      // gas: 120000000000000,
       timeout: 1800000,
       url: "https://data-seed-prebsc-1-s2.binance.org:8545",
-      accounts: [PRIVATE_KEY]
-    }
+      accounts: [PRIVATE_KEY]}
+    // },
+    // goerli: {
+    //   timeout: 1800000,
+    //   url: "https://goerli.infura.io/v3/9aa3d95b3bc440fa88ea12eaa4456161",
+    //   accounts: PRIVATE_KEY
+    // }
   },
   watcher: {
     compilation: {
@@ -36,9 +39,6 @@ module.exports = {
         params: { noCompile: true, testFiles: ["testfile.ts"] }
       }],
     }
-  },
-  etherscan: {
-    apiKey: "UN1PB9XKIN1QGIGI9XH1G1KRB4GSSBM5V3"
   },
   solidity: {
     version: "0.8.9",
