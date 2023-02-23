@@ -108,9 +108,9 @@ contract MutoPool is OwnableUpgradeable {
   modifier atStageSolutionSubmission(uint64 poolId) {
     require(
       poolData[poolId].initData.poolEndDate != 0 &&
-        block.timestamp >= poolData[poolId].initData.poolEndDate &&
-        poolData[poolId].clearingPriceOrder == bytes32(0),
-      "Not in submission phase"
+        block.timestamp >= poolData[poolId].initData.poolEndDate 
+        && poolData[poolId].clearingPriceOrder == bytes32(0)
+      ,"Not in submission phase"
     ); // pool end date must have reached
     require(!poolData[poolId].statusData.isScam && !poolData[poolId].statusData.isDeleted, "Deleted or Scammed"); //pool must not be deleted or scamed
     _;
@@ -295,7 +295,7 @@ contract MutoPool is OwnableUpgradeable {
   }
 
   function markCancel(uint64 poolId) external {
-    require(msg.sender == poolData[poolId].poolOwner, "Only Owner can cancel");
+    require(msg.sender == poolData[poolId].poolOwner || msg.sender == owner(), "Only Owner can cancel");
     poolData[poolId].statusData.isCancelled = true;
     // returns the funds to pooler
     poolData[poolId].initData.poolingToken.safeTransfer(
@@ -328,8 +328,25 @@ contract MutoPool is OwnableUpgradeable {
     uint96[] memory _sellAmounts,
     bytes32[] memory _prevSellOrders
   ) external atStageOrderPlacement(poolId) isScammedOrDeleted(poolId) returns (uint64 userId) {
-    bytes32 leaf = keccak256(abi.encodePacked(msg.sender));
-    require(MerkleProof.verify(_merkleProof, poolData[poolId].merkleRoot, leaf), "User not whitelisted");
+    if (
+      keccak256(abi.encodePacked(poolData[poolId].merkleRoot)) ==
+      keccak256(abi.encodePacked("0x0000000000000000000000000000000000000000000000000000000000000000"))
+    ) {
+      bytes32 leaf = keccak256(abi.encodePacked(msg.sender));
+      require(MerkleProof.verify(_merkleProof, poolData[poolId].merkleRoot, leaf), "User not whitelisted");
+    }
+
+    /** AUTO SETTLE */
+    // require(_minBuyAmounts.length == 1 && _sellAmounts.length == 1, "More than one orders");
+    // uint64 userId = getUserId(msg.sender);
+    // require(
+    //   poolData[poolId].interimOrder.smallerThan(IterableOrderedOrderSet.encodeOrder(userId, _minBuyAmounts[0], _sellAmounts[0])),
+    //   "order lessthan interim order"
+    // );
+    // _placeSellOrders(poolId, _minBuyAmounts, _sellAmounts, _prevSellOrders, msg.sender);
+    // settlePool(poolId);
+    /** AUTO SETTLE */
+
     return _placeSellOrders(poolId, _minBuyAmounts, _sellAmounts, _prevSellOrders, msg.sender);
   }
 
@@ -363,8 +380,9 @@ contract MutoPool is OwnableUpgradeable {
     poolData[poolId].initData.biddingToken.safeTransfer(msg.sender, (claimableAmount * poolData[poolId].initData.tokenDecimals.tokenBDecimal) / 1e18);
   }
 
-  function refundOrder(uint64 poolId, bytes32 order) external scammedOrDeleted(poolId) {
+  function refundOrder(uint64 poolId, bytes32 order) external {
     // check if order exists
+    require(poolData[poolId].statusData.minFundingThresholdNotReached,"Can Claim only");
     require(sellOrders[poolId].remove(order), "Order not refundable");
     uint64 userId = getUserId(msg.sender);
     (uint64 userIdOrder, uint96 buyAmount, uint96 sellAmount) = order.decodeOrder();
