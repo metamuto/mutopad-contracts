@@ -405,6 +405,7 @@ contract MutoPool is OwnableUpgradeable {
     }
     PoolData memory auction = poolData[poolId];
     (, uint96 priceNumerator, uint96 priceDenominator) = auction.clearingPriceOrder.decodeOrder();
+    
     (uint64 userId, , ) = orders[0].decodeOrder();
     bool minFundingThresholdNotReached = poolData[poolId].statusData.minFundingThresholdNotReached;
     for (uint256 i = 0; i < orders.length; i++) {
