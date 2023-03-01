@@ -169,6 +169,8 @@ contract MutoPool is OwnableUpgradeable {
 
   event UserRegistration(address indexed user, uint64 userId);
 
+  event WhiteListPoolMerkle(uint64 indexed poolId,bytes32 merkleRoot);
+
   function setFeeParameters(uint256 newFeeNumerator, address newfeeReceiverAddress) external onlyOwner {
     require(newFeeNumerator <= 15, "Fee can't be > 1.5 %"); // pool fee can be maximum upto 1.5 %
     feeReceiverUserId = getUserId(newfeeReceiverAddress);
@@ -271,6 +273,12 @@ contract MutoPool is OwnableUpgradeable {
     poolData[poolId].initData.minFundingThreshold = _fundingThreshold;
     poolData[poolId].initData.minimumBiddingAmountPerOrder = _minBid;
     emit PoolEdittedByAdmin(poolId, _startTime, _endTime, _cancelTime, _minBid, _fundingThreshold);
+  }
+
+  function whitelistUpdate(uint64 poolId, bytes32 _merkleRoot) external  {
+    require(msg.sender == poolData[poolId].poolOwner, "pool owner only");
+    poolData[poolId].merkleRoot = _merkleRoot;
+    emit WhiteListPoolMerkle(poolId, _merkleRoot);
   }
 
   function updatePoolUser(uint64 poolId, string memory _formHash) external {

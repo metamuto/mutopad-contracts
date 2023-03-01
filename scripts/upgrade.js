@@ -10,6 +10,9 @@ async function main() {
     "0x6faFD24F6d186C7E0a6AED2926D51f3321624C6f",
     MutoPool
   );
+
+  await mutoPool.deployTransaction.wait(4);
+
   let mutoPoolImplementation = await upgrades.erc1967.getImplementationAddress(
     mutoPool.address
   );
