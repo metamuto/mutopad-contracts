@@ -1,0 +1,420 @@
+{
+  "manifestVersion": "3.2",
+  "admin": {
+    "address": "0x6E237d59AD1DA6CD78282ae476F46Bb7C8B7DFC3",
+    "txHash": "0x9ef6d9431ffbf10b5d3687dbda4205a6ca392e25acb925808386c74207d42063"
+  },
+  "proxies": [
+    {
+      "address": "0x057507edA5242a0fe08142d6258F30F18ddfb626",
+      "txHash": "0xae351bb93fafa1e15768a93a9b1b8f4535d44a0c6383fdda585d47ce0ca117c7",
+      "kind": "transparent"
+    }
+  ],
+  "impls": {
+    "54f76b783cd25a79e4b12c96b34907185d185efb128e0cb17a5bcd7f673ed3a5": {
+      "address": "0xCdbFA73a459Ad63Acf805cFd9C931346276799c4",
+      "txHash": "0xcd235a5f28bac81470643f29eb5e93fa560f0014e1c8c4d4413f778239779510",
+      "layout": {
+        "solcVersion": "0.8.9",
+        "storage": [
+          {
+            "label": "_initialized",
+            "offset": 0,
+            "slot": "0",
+            "type": "t_uint8",
+            "contract": "Initializable",
+            "src": "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol:62",
+            "retypedFrom": "bool"
+          },
+          {
+            "label": "_initializing",
+            "offset": 1,
+            "slot": "0",
+            "type": "t_bool",
+            "contract": "Initializable",
+            "src": "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol:67"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "1",
+            "type": "t_array(t_uint256)50_storage",
+            "contract": "ContextUpgradeable",
+            "src": "@openzeppelin/contracts-upgradeable/utils/ContextUpgradeable.sol:36"
+          },
+          {
+            "label": "_owner",
+            "offset": 0,
+            "slot": "51",
+            "type": "t_address",
+            "contract": "OwnableUpgradeable",
+            "src": "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol:22"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "52",
+            "type": "t_array(t_uint256)49_storage",
+            "contract": "OwnableUpgradeable",
+            "src": "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol:94"
+          },
+          {
+            "label": "poolData",
+            "offset": 0,
+            "slot": "101",
+            "type": "t_mapping(t_uint64,t_struct(PoolData)2222_storage)",
+            "contract": "MutoPool",
+            "src": "contracts/MutoPool.sol:64"
+          },
+          {
+            "label": "sellOrders",
+            "offset": 0,
+            "slot": "102",
+            "type": "t_mapping(t_uint256,t_struct(Data)4837_storage)",
+            "contract": "MutoPool",
+            "src": "contracts/MutoPool.sol:65"
+          },
+          {
+            "label": "numUsers",
+            "offset": 0,
+            "slot": "103",
+            "type": "t_uint64",
+            "contract": "MutoPool",
+            "src": "contracts/MutoPool.sol:67"
+          },
+          {
+            "label": "poolCounter",
+            "offset": 8,
+            "slot": "103",
+            "type": "t_uint64",
+            "contract": "MutoPool",
+            "src": "contracts/MutoPool.sol:68"
+          },
+          {
+            "label": "registeredUsers",
+            "offset": 0,
+            "slot": "104",
+            "type": "t_struct(Data)4638_storage",
+            "contract": "MutoPool",
+            "src": "contracts/MutoPool.sol:69"
+          },
+          {
+            "label": "feeReceiverUserId",
+            "offset": 0,
+            "slot": "106",
+            "type": "t_uint64",
+            "contract": "MutoPool",
+            "src": "contracts/MutoPool.sol:71"
+          },
+          {
+            "label": "feeNumerator",
+            "offset": 0,
+            "slot": "107",
+            "type": "t_uint256",
+            "contract": "MutoPool",
+            "src": "contracts/MutoPool.sol:72"
+          }
+        ],
+        "types": {
+          "t_address": {
+            "label": "address",
+            "numberOfBytes": "20"
+          },
+          "t_array(t_uint256)49_storage": {
+            "label": "uint256[49]",
+            "numberOfBytes": "1568"
+          },
+          "t_array(t_uint256)50_storage": {
+            "label": "uint256[50]",
+            "numberOfBytes": "1600"
+          },
+          "t_bool": {
+            "label": "bool",
+            "numberOfBytes": "1"
+          },
+          "t_bytes32": {
+            "label": "bytes32",
+            "numberOfBytes": "32"
+          },
+          "t_contract(IERC20Upgradeable)378": {
+            "label": "contract IERC20Upgradeable",
+            "numberOfBytes": "20"
+          },
+          "t_mapping(t_address,t_uint64)": {
+            "label": "mapping(address => uint64)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_bytes32,t_bytes32)": {
+            "label": "mapping(bytes32 => bytes32)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_uint256,t_struct(Data)4837_storage)": {
+            "label": "mapping(uint256 => struct IterableOrderedOrderSet.Data)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_uint64,t_address)": {
+            "label": "mapping(uint64 => address)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_uint64,t_struct(PoolData)2222_storage)": {
+            "label": "mapping(uint64 => struct PoolData)",
+            "numberOfBytes": "32"
+          },
+          "t_string_storage": {
+            "label": "string",
+            "numberOfBytes": "32"
+          },
+          "t_struct(Data)4638_storage": {
+            "label": "struct IdToAddressBiMap.Data",
+            "members": [
+              {
+                "label": "idToAddress",
+                "type": "t_mapping(t_uint64,t_address)",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "addressToId",
+                "type": "t_mapping(t_address,t_uint64)",
+                "offset": 0,
+                "slot": "1"
+              }
+            ],
+            "numberOfBytes": "64"
+          },
+          "t_struct(Data)4837_storage": {
+            "label": "struct IterableOrderedOrderSet.Data",
+            "members": [
+              {
+                "label": "nextMap",
+                "type": "t_mapping(t_bytes32,t_bytes32)",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "prevMap",
+                "type": "t_mapping(t_bytes32,t_bytes32)",
+                "offset": 0,
+                "slot": "1"
+              }
+            ],
+            "numberOfBytes": "64"
+          },
+          "t_struct(Decimals)2162_storage": {
+            "label": "struct Decimals",
+            "members": [
+              {
+                "label": "tokenADecimal",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "tokenBDecimal",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "1"
+              }
+            ],
+            "numberOfBytes": "64"
+          },
+          "t_struct(InitialPoolData)2190_storage": {
+            "label": "struct InitialPoolData",
+            "members": [
+              {
+                "label": "formHash",
+                "type": "t_string_storage",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "poolingToken",
+                "type": "t_contract(IERC20Upgradeable)378",
+                "offset": 0,
+                "slot": "1"
+              },
+              {
+                "label": "biddingToken",
+                "type": "t_contract(IERC20Upgradeable)378",
+                "offset": 0,
+                "slot": "2"
+              },
+              {
+                "label": "orderCancellationEndDate",
+                "type": "t_uint40",
+                "offset": 20,
+                "slot": "2"
+              },
+              {
+                "label": "poolStartDate",
+                "type": "t_uint40",
+                "offset": 25,
+                "slot": "2"
+              },
+              {
+                "label": "poolEndDate",
+                "type": "t_uint40",
+                "offset": 0,
+                "slot": "3"
+              },
+              {
+                "label": "pooledSellAmount",
+                "type": "t_uint96",
+                "offset": 5,
+                "slot": "3"
+              },
+              {
+                "label": "minBuyAmount",
+                "type": "t_uint96",
+                "offset": 17,
+                "slot": "3"
+              },
+              {
+                "label": "minimumBiddingAmountPerOrder",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "4"
+              },
+              {
+                "label": "minFundingThreshold",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "5"
+              },
+              {
+                "label": "isAtomicClosureAllowed",
+                "type": "t_bool",
+                "offset": 0,
+                "slot": "6"
+              },
+              {
+                "label": "tokenDecimals",
+                "type": "t_struct(Decimals)2162_storage",
+                "offset": 0,
+                "slot": "7"
+              }
+            ],
+            "numberOfBytes": "288"
+          },
+          "t_struct(PoolData)2222_storage": {
+            "label": "struct PoolData",
+            "members": [
+              {
+                "label": "initData",
+                "type": "t_struct(InitialPoolData)2190_storage",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "statusData",
+                "type": "t_struct(StatusData)2199_storage",
+                "offset": 0,
+                "slot": "9"
+              },
+              {
+                "label": "poolOwner",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "10"
+              },
+              {
+                "label": "initialPoolOrder",
+                "type": "t_bytes32",
+                "offset": 0,
+                "slot": "11"
+              },
+              {
+                "label": "interimSumBidAmount",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "12"
+              },
+              {
+                "label": "interimOrder",
+                "type": "t_bytes32",
+                "offset": 0,
+                "slot": "13"
+              },
+              {
+                "label": "clearingPriceOrder",
+                "type": "t_bytes32",
+                "offset": 0,
+                "slot": "14"
+              },
+              {
+                "label": "volumeClearingPriceOrder",
+                "type": "t_uint96",
+                "offset": 0,
+                "slot": "15"
+              },
+              {
+                "label": "feeNumerator",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "16"
+              },
+              {
+                "label": "merkleRoot",
+                "type": "t_bytes32",
+                "offset": 0,
+                "slot": "17"
+              }
+            ],
+            "numberOfBytes": "576"
+          },
+          "t_struct(StatusData)2199_storage": {
+            "label": "struct StatusData",
+            "members": [
+              {
+                "label": "isScam",
+                "type": "t_bool",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "isDeleted",
+                "type": "t_bool",
+                "offset": 1,
+                "slot": "0"
+              },
+              {
+                "label": "isCancelled",
+                "type": "t_bool",
+                "offset": 2,
+                "slot": "0"
+              },
+              {
+                "label": "minFundingThresholdNotReached",
+                "type": "t_bool",
+                "offset": 3,
+                "slot": "0"
+              }
+            ],
+            "numberOfBytes": "32"
+          },
+          "t_uint256": {
+            "label": "uint256",
+            "numberOfBytes": "32"
+          },
+          "t_uint40": {
+            "label": "uint40",
+            "numberOfBytes": "5"
+          },
+          "t_uint64": {
+            "label": "uint64",
+            "numberOfBytes": "8"
+          },
+          "t_uint8": {
+            "label": "uint8",
+            "numberOfBytes": "1"
+          },
+          "t_uint96": {
+            "label": "uint96",
+            "numberOfBytes": "12"
+          }
+        }
+      }
+    }
+  }
+}
